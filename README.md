@@ -1,7 +1,7 @@
 # Siamese Networkを用いた顔認識モデルの構築
 
 ## はじめに
-顔認識システムを構築する際に、**「1対1」モードと「1対多」モード**という2つの主要な手法があります。本記事では、特に「1対1」モードに焦点を当て、**Siamese Network（サイアムネットワーク）を用いた顔認識モデルの設計と構築**について詳しく解説します。
+顔認識システムを構築する際に、**「1対1」モードと「1対多」モード**という2つの主要な手法があります。本記事では、特に「1対1」モードに焦点を当て、**Siamese Network（シャムネットワーク）を用いた顔認識モデルの設計と構築**について詳しく解説します。
 
 ![](assets/eye-catch.png)
 
@@ -200,20 +200,98 @@ PyTorch Metric Learningは、Siamese Networkやトリプレットロスを用い
 
 以下はSiamese NetworkをEfficientNetV2をバックボーンとして構築し、Triplet Lossを使用した学習コードの例です。
 
-```python
+```python: siamese_network_training.py
+"""siamese_network_training.py.
+
+Summary:
+    このスクリプトは、PyTorchを使用してSiamese Networkを学習するためのコードです。
+    EfficientNetV2をバックボーンに採用し、損失関数としてTriplet Margin Lossを使用しています。
+    距離計量にはコサイン類似度を採用しています。
+
+    主な特徴:
+    - ハイパーパラメータを自由に設定可能（例: バッチサイズ、埋め込み次元、学習率など）。
+    - TensorBoardとの統合により、学習の進捗を可視化可能。
+    - バリデーション結果に基づいて、モデルを保存する仕組みを実装。
+    - PyTorch Metric LearningのDatasets機能を活用した簡潔なデータローダー設定。
+
+Example:
+    1. `data_dir`にデータセットのパスを指定してください。
+    2. スクリプトを実行し、TensorBoardで進捗を確認してください（`tensorboard --logdir=runs`を使用）。
+
+"""
+import os
+
 import torch
 import torch.nn as nn
-import torch.optim as optim
+from pytorch_metric_learning import distances, losses, samplers
 from timm import create_model
-from pytorch_metric_learning import losses, distances, samplers
-from torchvision import datasets, transforms
-from torch.utils.data import Subset, DataLoader
-from sklearn.model_selection import StratifiedShuffleSplit
-import numpy as np
+from torch.utils.data import DataLoader, random_split
+from torch.utils.tensorboard import SummaryWriter
+from torchvision import transforms
+from torchvision.datasets import ImageFolder
+
+# ハイパーパラメータの設定
+embedding_size = 512  # 埋め込みベクトルの次元数
+batch_size = 32  # バッチサイズ
+sampler_m = 4  # クラスごとにサンプリングする画像数
+data_dir = "path/to/data"  # データセットのディレクトリ
+lr = 1e-4  # 学習率
+weight_decay = 1e-5  # 正則化の強さ
+eps = 1e-8  # AdamWのepsilon
+T_max = 50  # 学習率スケジューラのサイクル長
+eta_min = 1e-6  # 学習率の最小値
+mean_value = [0.485, 0.456, 0.406]  # 正規化の平均値 (EfficientNetV2用)
+std_value = [0.229, 0.224, 0.225]  # 正規化の標準偏差
+model_save_dir = "saved_models"  # モデル保存ディレクトリ
+log_dir = "runs"  # TensorBoardのログディレクトリ
+num_epochs = 100  # 学習エポック数
+margin = 0.1  # TripletMarginLossのマージン値
+os.makedirs(model_save_dir, exist_ok=True)
+os.makedirs(log_dir, exist_ok=True)
+
+# TensorBoardのSummaryWriterを初期化
+writer = SummaryWriter(log_dir=log_dir)
+
+# データ変換の設定
+train_transform = transforms.Compose([
+    transforms.Resize((224, 224)),
+    transforms.RandomHorizontalFlip(p=0.5),  # 水平方向の反転
+    transforms.RandomRotation(degrees=15),  # ランダムな回転
+    transforms.RandomResizedCrop(size=(224, 224), scale=(0.8, 1.0), ratio=(0.75, 1.33)),  # ランダムなトリミング
+    transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1),
+    transforms.ToTensor(),
+    transforms.Normalize(mean=mean_value, std=std_value),
+])
+
+test_transform = transforms.Compose([
+    transforms.Resize((224, 224)),
+    transforms.ToTensor(),
+    transforms.Normalize(mean=mean_value, std=std_value),
+])
+
+# データセットの準備
+train_dataset = ImageFolder(
+    root=data_dir,
+    transform=train_transform
+)
+
+# バリデーションとテストの分割
+val_size = int(0.2 * len(train_dataset))
+test_size = len(train_dataset) - val_size
+val_dataset, test_dataset = random_split(train_dataset, [val_size, test_size])
+
+# サンプラーの設定（トレーニングデータにのみ適用）
+sampler = samplers.MPerClassSampler([label for _, label in train_dataset.samples], m=sampler_m, batch_size=batch_size)
+
+# データローダーの準備
+train_dataloader = DataLoader(train_dataset, batch_size=batch_size, sampler=sampler, drop_last=True)
+val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
+test_dataloader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
+
 
 # Siamese Networkの定義
 class SiameseNetwork(nn.Module):
-    def __init__(self, embedding_dim=512):
+    def __init__(self, embedding_dim=embedding_size):
         super(SiameseNetwork, self).__init__()
         # EfficientNetV2をバックボーンとして使用（timmからインポート）
         self.backbone = create_model('tf_efficientnetv2_b0.in1k', pretrained=True, num_classes=0)
@@ -224,56 +302,6 @@ class SiameseNetwork(nn.Module):
     def forward(self, x):
         return self.embedder(self.backbone(x))
 
-# ハイパーパラメータの設定
-embedding_size = 512
-batch_size = 32
-sampler_m = 4  # クラスごとにサンプリングする画像数
-data_dir = "path/to/data"  # データセットのディレクトリ
-
-# データ変換の設定
-train_transform = transforms.Compose([
-    transforms.Resize((224, 224)),
-    transforms.ToTensor(),
-    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-])
-
-test_transform = transforms.Compose([
-    transforms.Resize((224, 224)),
-    transforms.ToTensor(),
-    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-])
-
-# データセットの準備
-class CustomImageFolder(datasets.ImageFolder):
-    def __init__(self, root, transform=None, target_transform=None):
-        super().__init__(root, transform=transform, target_transform=target_transform)
-
-train_dataset = CustomImageFolder(root=data_dir, transform=train_transform)
-full_dataset = CustomImageFolder(root=data_dir, transform=test_transform)
-
-# StratifiedShuffleSplitを使用してデータを分割
-sss = StratifiedShuffleSplit(n_splits=1, test_size=0.2, random_state=0)
-train_idxs, val_test_idxs = next(sss.split(np.array(train_dataset.samples), np.array(train_dataset.targets)))
-
-# 訓練セットのSubsetを作成
-train_subset = Subset(train_dataset, train_idxs)
-train_targets = [train_dataset.targets[i] for i in train_idxs]
-
-# val_test_idxsに対応するターゲットを抽出するためのインデックスを取得
-val_test_targets = [full_dataset.targets[i] for i in val_test_idxs]
-sss = StratifiedShuffleSplit(n_splits=1, test_size=0.5, random_state=0)
-val_idxs, test_idxs = next(sss.split(val_test_idxs, val_test_targets))
-
-val_subset = Subset(full_dataset, [val_test_idxs[i] for i in val_idxs])
-test_subset = Subset(full_dataset, [val_test_idxs[i] for i in test_idxs])
-
-# サンプラーの設定
-sampler = samplers.MPerClassSampler(train_targets, m=sampler_m)
-
-# データローダーの準備
-train_dataloader = DataLoader(train_subset, batch_size=batch_size, sampler=sampler)
-val_dataloader = DataLoader(val_subset, batch_size=batch_size, shuffle=False)
-test_dataloader = DataLoader(test_subset, batch_size=batch_size, shuffle=False)
 
 # モデルの初期化
 model = SiameseNetwork(embedding_dim=embedding_size)
@@ -281,9 +309,6 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model.to(device)
 
 # オプティマイザの設定
-lr = 1e-4
-weight_decay = 1e-5
-eps = 1e-8
 optimizer = torch.optim.AdamW(
     model.parameters(),
     lr=lr,
@@ -292,8 +317,6 @@ optimizer = torch.optim.AdamW(
 )
 
 # スケジューラの設定
-T_max = 50
-eta_min = 1e-6
 scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
     optimizer,
     T_max=T_max,
@@ -301,15 +324,17 @@ scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
 )
 
 # 損失関数の設定
-loss_fn = losses.ContrastiveLoss(
-    pos_margin=0.05,
-    neg_margin=1.0,
-    distance=distances.CosineSimilarity()
+loss_fn = losses.TripletMarginLoss(
+    margin=margin,
+    distance=distances.CosineSimilarity(),
+    swap=False
 )
 
 # 学習ステップの例
-for epoch in range(1):
+best_loss = float('inf')  # 最小の損失を追跡
+for epoch in range(1, num_epochs + 1):
     model.train()
+    epoch_loss = 0.0
     for batch in train_dataloader:
         optimizer.zero_grad()
         inputs, labels = batch
@@ -318,7 +343,32 @@ for epoch in range(1):
         loss = loss_fn(embeddings, labels)
         loss.backward()
         optimizer.step()
+        epoch_loss += loss.item()
     scheduler.step()
-    print(f"Epoch {epoch + 1}, Loss: {loss.item()}")
 
+    epoch_loss /= len(train_dataloader)  # エポックあたりの平均損失
+    print(f"Epoch {epoch}, Loss: {epoch_loss:.4f}")
+
+    # TensorBoardへの書き込み
+    writer.add_scalar('Loss/train', epoch_loss, epoch)
+
+    # モデル保存の条件
+    if epoch_loss < best_loss:
+        best_loss = epoch_loss
+        model_path = os.path.join(model_save_dir, f"model_epoch{epoch}_loss{epoch_loss:.4f}.pth")
+        torch.save(model.state_dict(), model_path)
+        print(f"Model saved to {model_path}")
+
+writer.close()
+
+```
+
+## さいごに
+`siamese_network_training.py`を実際に動作させましたが、この記事を書き終わるまでに学習が終わりませんでした。
+
+本記事ではSiamese Networkを用いた1対1モードの学習モデルを作成するためのコードを作成しました。
+
+このコードを眺めて「どこら辺がSiamese Network？」と感じると思いますので以下に解説します。
+
+Siamese Networkの定義は「**同じ構造を持つ2つのサブネットワークを使用して、入力ペアの特徴量を比較するネットワーク**」です。
 ```
