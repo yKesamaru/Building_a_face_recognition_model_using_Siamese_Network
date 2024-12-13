@@ -1,7 +1,7 @@
 # Siamese Networkを用いた顔認識モデルの構築
 
 ## はじめに
-顔認識システムを構築する際に、**「1対1」モードと「1対多」モード**という2つの主要な手法があります。本記事では、特に「1対1」モードに焦点を当て、**Siamese Network（シャムネットワーク）を用いた顔認識モデルの設計と構築**について詳しく解説します。
+顔認識システムを構築する際に、**「1対1」モードと「1対多」モード**という2つの主要な手法があります。本記事では、特に「1対1」モードに焦点を当て、**Siamese Network（シャムネットワーク）を用いた顔認識モデルの設計と構築**について詳しく解説し、最後に実行可能なコードを紹介します。
 
 ![](assets/eye-catch.png)
 
@@ -9,7 +9,7 @@
 一口に顔認証システムといっても、どのようなシーンで使われるのかの想定によって、システム構成が異なってきます。具体的には、使用される学習済みモデルが異なってくる、ということです。
 
 ### 小規模タスク
-特定環境、例えば企業内の認証システムなどでは、高精度な1対1認証が求められます。最もよく使用されるのは指紋認証です。スマホのロック解除が良い例ですね。企業内の顔認証システム構築では一般的にこのスコープに含まれます。
+特定環境、例えば企業内の認証システムなどでは、高精度な1対1認証が求められます。私感ですが、最もよく使用されるのは指紋認証のように感じます。スマホのロック解除にも使われますね。企業内の顔認証システム構築では一般的にこのスコープに含まれます。
 
 このようなスコープで使われるのは1対1認証です。 小規模タスクで用いられます。
 
@@ -68,11 +68,9 @@ $$1\text{-}1\ \text{モード} \subseteq 1\text{-}\text{多}\ \text{モード}$$
 
 ![](assets/2024-12-13-14-23-15.png)
 
-このネットワークは、2つの入力を受け取り、それらの類似度を学習する構造を持っています。現在では以下のような分野で広く活用されています。
-- 顔認証
-- 画像類似度検索
-- 生体認証
-- 画像位置合わせ
+[はやぶさの技術ノート: 【深層距離学習】Siamese NetworkとContrastive Lossを徹底解説](https://cpp-learning.com/siamese-network/)がとてもわかり易いです。
+
+このネットワークは、2つの入力を受け取り、それらの類似度を学習する構造を持っています。
 
 ### 主な特徴
 Siamese Networkは、同一構造の2つのサブネットワークで特徴を抽出し、その類似性を計算します。この構造により、「1対1」タスクに特化した高い性能を発揮します。
@@ -100,25 +98,37 @@ Siamese Networkの性能は、バックボーンの選択によって大きく�
 EfficientNetV2やResNetなど、高性能なバックボーンを利用することで、入力画像から有用な特徴を効率的に抽出できます。
 
 ### バックボーンの役割
-バックボーンは、ネットワークの基盤として機能し、入力データを低次元の特徴ベクトルに変換します。この特徴ベクトルが、類似度計算や分類タスクの基盤となります。
+バックボーンを特徴抽出器として機能させ、入力データを低次元の特徴ベクトルに変換します。
 
 ### ネットワーク全体の役割
 Siamese Networkでは、バックボーンで抽出された特徴ベクトルを比較し、入力ペアの類似性を判定します。これにより、同一人物か否かの判断が可能になります。
 
-
-
 ## Siamese Networkに最適な損失関数
-
 Siamese Networkでは、以下のような損失関数を使用して類似度を学習します。
 
 ### Contrastive Loss
-Contrastive Lossは、2つの入力間の距離を学習するために使用されます。同一人物の場合は距離を最小化し、異なる人物の場合は距離を最大化します。
+Siamese Networkにおいて最も一般的です。
+
+$$L = \frac{1}{2} \left( Y D^2 + (1 - Y) \max(\text{margin} - D, 0)^2 \right)
+$$
 
 ### Triplet Loss
 Triplet Lossは、アンカー、ポジティブ、ネガティブの3つの入力を用いて類似性を最適化します。この損失関数は、埋め込み空間での識別性を向上させる効果があります。dlibの学習済みモデルはこのトリプレットロスを採用しています。
 
+$$L = \max(D(a, p) - D(a, n) + \text{margin}, 0)$$
+
+- $D(a, p)$: アンカー ($a$) とポジティブ ($p$) サンプル間の距離。
+- $D(a, n)$: アンカー ($a$) とネガティブ ($n$) サンプル間の距離。
+- $\text{margin}$: ポジティブとネガティブサンプルの距離の差を保証するためのマージン。
+
 ### Binary Cross-Entropy Loss
 Binary Cross-Entropy Lossは、2つの入力が同一か否かを確率的に予測する損失関数です。主に類似度を確率として出力したい場合に使用されます。
+
+$$L = - \frac{1}{N} \sum_{i=1}^N \left[ y_i \log(\hat{y}_i) + (1 - y_i) \log(1 - \hat{y}_i) \right]$$
+
+- $y_i$: 実際のラベル（0または1）。
+- $\hat{y}_i$: モデルの予測確率（0〜1）。
+- $N$: サンプル数。
 
 ## Siamese Networkで必要なID数の見積もり
 
@@ -132,8 +142,7 @@ Siamese Networkでは、IDの数そのものよりも生成可能なペアの数
 - **中規模タスク** 1000～2000ID。
 - **大規模タスク** 5000ID以上。
 
-### その他の重要点
-ペアの多様性や各IDに含まれる画像数がモデルの性能に影響を与えるため、顔画像データセットの質が重要です。
+その他、ペアの多様性や各IDに含まれる画像数がモデルの性能に影響を与えるため、顔画像データセットの質が重要です。
 
 ## オプティマイザとスケジューラの選択
 
@@ -198,7 +207,7 @@ PyTorch Metric Learningは、Siamese Networkやトリプレットロスを用い
 
 ## Siamese Networkの実装例
 
-以下はSiamese NetworkをEfficientNetV2をバックボーンとして構築し、Triplet Lossを使用した学習コードの例です。
+以下はSiamese NetworkをEfficientNetV2をバックボーンとして構築し、Triplet Lossを使用した学習コードです。
 
 ```python: siamese_network_training.py
 """siamese_network_training.py.
@@ -366,9 +375,17 @@ writer.close()
 ## さいごに
 `siamese_network_training.py`を実際に動作させましたが、この記事を書き終わるまでに学習が終わりませんでした。
 
+![](assets/2024-12-13-22-18-35.png)
+
 本記事ではSiamese Networkを用いた1対1モードの学習モデルを作成するためのコードを作成しました。
 
-このコードを眺めて「どこら辺がSiamese Network？」と感じると思いますので以下に解説します。
+このコードを眺めて「どこら辺がSiamese Network？」と感じた方はぜひ[はやぶさの技術ノート: 【深層距離学習】Siamese NetworkとContrastive Lossを徹底解説](https://cpp-learning.com/siamese-network/)をご参照ください。とてもわかり易いです。
 
-Siamese Networkの定義は「**同じ構造を持つ2つのサブネットワークを使用して、入力ペアの特徴量を比較するネットワーク**」です。
-```
+## 文献・参考サイト
+- [Siamese NetworkとContrastive Lossを徹底解説 - はやぶさの技術ノート](https://cpp-learning.com/siamese-network/)
+- [Siamese Networkの提案論文（NIPS1993）](https://papers.nips.cc/paper/1993/file/288cc0ff022877bd3df94bc9360b9c5d-Paper.pdf)
+- [J-GLOBALでの手書き文字認証に関する情報](https://jglobal.jst.go.jp/detail?JGLOBAL_ID=201902267980547740)
+- [PyTorch Metric Learning](https://kevinmusgrave.github.io/pytorch-metric-learning/)
+- [FACE01 開発リポジトリ](https://github.com/yKesamaru/FACE01_DEV)
+- [FACE01 学習済みモデル](https://github.com/yKesamaru/FACE01_trained_models)
+- [全ての学習率スケジューリングを過去にするOptimizer - DeNA技術記事](https://zenn.dev/dena/articles/6f04641801b387)
