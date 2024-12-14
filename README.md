@@ -677,26 +677,28 @@ if __name__ == "__main__":
 
 さすがに10クラスしか学習していない学習済みモデルでは、未知の20クラスに対してまともな精度は出せないですね。
 
-とはいえ、今のは1対多モード用のコードでした。次は1対1モード用のROC曲線作成コード（`aoc_plot_siamese_1-N.py`）を用意して実行してみます。
+とはいえ、今のは1対多モード用のコードでした。次は1対1モード用のROC曲線作成コード（`aoc_plot_siamese_1-1.py`）を用意して実行してみます。
 
 ```python
-"""aoc_plot_siamese_1-N.py.
+"""aoc_plot_siamese_1-1.py.
 
 Summary:
     このスクリプトは、学習済みのSiamese Networkモデルを用いて
-    ROC曲線（AOC曲線）をプロットするためのコードです。
-    このスクリプトは1対1モードではなく、1対Nモードの精度を検証します。
-    1対1モードで学習されたモデルを評価した場合、一般的に精度は低く出力されます。
+    1対1モードにおけるROC曲線（AOC曲線）をプロットするためのコードです。
+    特定の登録者（テンプレート）と他の画像との類似度を計算し、
+    登録者本人のデータ（Positive）と他人のデータ（Negative）を区別する能力を評価します。
+    1対Nモードと異なり、特定のクラスを基準としてROC曲線とAUCスコアを算出します。
 
     主な機能:
     - 検証用データセットから埋め込みベクトルを生成。
-    - 埋め込みベクトル間のコサイン類似度を計算。
+    - 登録者（テンプレート）と他の画像の間でコサイン類似度を計算。
     - ROC曲線を描画し、AUCスコアを算出。
     - プロット画像をカレントディレクトリに保存。
 
 License:
     This script is licensed under the terms provided by yKesamaru, the original author.
 """
+
 
 import matplotlib.pyplot as plt
 import torch
@@ -728,13 +730,13 @@ class SiameseNetwork(nn.Module):
 
 # 学習済みモデルの読み込み
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model_path = "/home/user/bin/pytorch-metric-learning/saved_models/model_epoch8_loss0.0010.pth"
+model_path = "/home/terms/bin/pytorch-metric-learning/model_epoch8_loss0.0010_2024年12月14日.pth"
 model = SiameseNetwork(embedding_dim=512)  # 学習時と同じモデル構造を再現
 model.load_state_dict(torch.load(model_path, map_location=device))
 model.eval().to(device)
 
 # 検証用データのパス
-test_data_dir = "/home/user/bin/pytorch-metric-learning/otameshi_kensho/"
+test_data_dir = "/home/terms/bin/pytorch-metric-learning/otameshi_kensho/"
 
 # 検証用データの変換
 test_transform = transforms.Compose([
@@ -750,7 +752,7 @@ test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=1, shuffle=Fa
 
 def calculate_similarity(embedding1, embedding2):
     """
-    埋め込みベクトル間のコサイン類似度を計算する。
+    埋め込みベクトル間のコサイン類似度を計算。
 
     Args:
         embedding1 (torch.Tensor): 埋め込みベクトル1。
@@ -782,41 +784,42 @@ def compute_embeddings(loader, model):
     return embeddings
 
 
-def calculate_similarities_and_labels(embeddings):
+def evaluate_one_to_one(embeddings, target_class):
     """
-    クラスごとの埋め込みベクトルを用いて類似度とラベルを計算。
+    1対1モードに基づき、特定のクラスとのROC曲線を評価。
 
     Args:
         embeddings (dict): クラスごとの埋め込みベクトルの辞書。
+        target_class (int): 評価対象クラス（登録者）のラベル。
 
     Returns:
         tuple: 類似度リスト、ラベルリスト。
     """
     similarities = []
     labels = []
-    class_keys = list(embeddings.keys())
+    target_embeddings = embeddings[target_class]
 
-    for i, class_label_1 in enumerate(class_keys):
-        for embedding1 in embeddings[class_label_1]:
-            # 同じクラスとの比較（ラベル=1）
-            for embedding2 in embeddings[class_label_1]:
-                if not torch.equal(embedding1, embedding2):  # 同じ画像はスキップ
-                    sim = calculate_similarity(embedding1, embedding2)
+    # 登録者 vs 本人（Positive: 1）
+    for embedding in target_embeddings:
+        for other_embedding in target_embeddings:
+            if not torch.equal(embedding, other_embedding):  # 同じ画像はスキップ
+                sim = calculate_similarity(embedding, other_embedding)
+                similarities.append(sim)
+                labels.append(1)  # 本人認証（Positive）
+
+    # 登録者 vs 他人（Negative: 0）
+    for other_class, other_embeddings in embeddings.items():
+        if other_class != target_class:
+            for other_embedding in other_embeddings:
+                for target_embedding in target_embeddings:
+                    sim = calculate_similarity(target_embedding, other_embedding)
                     similarities.append(sim)
-                    labels.append(1)  # 同じクラスはラベル1
-
-            # 異なるクラスとの比較（ラベル=0）
-            for j, class_label_2 in enumerate(class_keys):
-                if i != j:  # 異なるクラスのみ
-                    for embedding2 in embeddings[class_label_2]:
-                        sim = calculate_similarity(embedding1, embedding2)
-                        similarities.append(sim)
-                        labels.append(0)  # 異なるクラスはラベル0
+                    labels.append(0)  # 他人認証（Negative）
 
     return similarities, labels
 
 
-def plot_roc_curve(similarities, labels, output_path="roc_curve.png"):
+def plot_roc_curve(similarities, labels, output_path="roc_curve_1to1.png"):
     """
     ROC曲線をプロットし、画像として保存する。
 
@@ -843,11 +846,14 @@ if __name__ == "__main__":
     # 埋め込みベクトルの計算
     embeddings = compute_embeddings(test_loader, model)
 
-    # 類似度とラベルの計算
-    similarities, labels = calculate_similarities_and_labels(embeddings)
+    # 評価対象クラス（例: 最初のクラス）
+    target_class = 0  # フォルダ構造によるクラスID
+
+    # ROC曲線用データの計算
+    similarities, labels = evaluate_one_to_one(embeddings, target_class)
 
     # ROC曲線のプロットと保存
-    plot_roc_curve(similarities, labels, output_path="roc_curve.png")
+    plot_roc_curve(similarities, labels, output_path="roc_curve_1to1.png")
 
 ```
 
