@@ -11,7 +11,7 @@
 ### 小規模タスク
 特定環境、例えば企業内の認証システムなどでは、高精度な1対1認証が求められます。私感ですが、最もよく使用されるのは指紋認証のように感じます。スマホのロック解除にも使われますね。企業内の顔認証システム構築では一般的にこのスコープに含まれます。
 
-このようなスコープで使われるのは1対1認証です。 小規模タスクで用いられます。
+このようなスコープで使われるのは1対1認証です。
 
 ![https//jp.fujitsu.com/platform/pc/product/related/security/auth.html](https://raw.githubusercontent.com/yKesamaru/Building_a_face_recognition_model_using_Siamese_Network/refs/heads/master/assets/shimon_esprimo2.jpg)
 
@@ -25,31 +25,31 @@
 
 ## 【1対1モード】と【1対多モード】の違い
 
-顔認識システムには、大きく分けて2つのモードがあります。それぞれの特徴と使用シーンを見てみましょう。
+顔認識システムには、先程のスコープに対応させるため、大きく分けて2つのモードがあります。それぞれの特徴と使用シーンを見てみましょう。
 
 ### 【1対1モード】
-「1対1」モードは、2つの顔画像を比較し、それらが同一人物かどうかを判定する手法です。このモードは、例えば生体認証やセキュリティ認証など、ペア単位の顔認識が求められるタスクに適しています。
+「1対1」モードは、2つの顔画像を比較し、それらが同一人物かどうかを判定する手法です。このモードは、**ペア単位**の認証が求められるタスクに使われます。
 
-- 類似度計算が中心。
-- ペア単位での高精度な判定が可能。
-- データベースとの照合を行わないため、処理が簡潔。
+- 類似度計算が中心
+- ペア単位での判定（学習が比較的容易）
+- データベースとの照合も行わないため、処理が簡潔。
 
-通常、顔認証システムと呼ばれる多くが「1対1」モードであるといえます。正解データとの突き合わせをすればよいだけなので、比較的簡単に精度を稼げます。
+通常、顔認証システムと呼ばれる多くが「1対1」モードであるといえます。正解データとの突き合わせをすればよいだけなので、（ちゃんとやれば）比較的簡単に精度を稼げます。
 
 ### 【1対多モード】
-一方、「1対多」モードは、1つの顔画像をデータベースと照合し、最も一致する人物を特定する方法です。このモードは、監視カメラシステムや公共施設のアクセス制御など、大量の顔データを管理するシステムで一般的に使用されます。
+「1対多」モードは、1つの顔画像をデータベースと照合し、最も一致する人物を特定する方法です。監視カメラシステムや公共施設のアクセス制御など、大量の顔データを管理するシステムで一般的に使用されます。
 
-- データベース全体と照合するため、計算コストが高い。
-- 顔IDの分類タスクとして設計される。
-- 複数の人物から候補を絞り込むことが可能。
+- データベース全体と照合するため、計算コストが高い
+- 顔IDの分類タスクとして設計される（学習が難しい）
+- 複数の人物から候補を絞り込むことが前提
 
 先ほど紹介した[FACE01](https//github.com/yKesamaru/FACE01_DEV)や[その学習済みモデル](https//github.com/yKesamaru/FACE01_trained_models)はここに含まれます。
 
 「1対多」モードは「1対1」モードを包含します。
 
-$$1\text{-}1\ \text{モード} \subseteq 1\text{-}\text{多}\ \text{モード}$$
+$$1\text{:}1\ \text{モード} \subseteq 1\text{:}\text{N}\ \text{モード}$$
 
-一般的に1対多モードを作成するには1対1モードよりコストがかかる傾向があります。
+なので1対多モード用に作られた学習モデルは1対1モードでも問題無く使用可能です。
 
 
 | 特徴              | 1対1モード                                   | 1対多モード                                   |
@@ -62,7 +62,7 @@ $$1\text{-}1\ \text{モード} \subseteq 1\text{-}\text{多}\ \text{モード}$$
 ## Siamese Networkとは？
 
 ### 概要
-[Siamese Networkは1994年にBromleyらによって提案](https//papers.nips.cc/paper/1993/file/288cc0ff022877bd3df94bc9360b9c5d-Paper.pdf?utm_source=chatgpt.com)され、当初は[手書き文字認証に使用](https//jglobal.jst.go.jp/detail?JGLOBAL_ID=201902267980547740&utm_source=chatgpt.com)されていました。
+[Siamese Networkは1994年にBromleyらによって提案](https//papers.nips.cc/paper/1993/file/288cc0ff022877bd3df94bc9360b9c5d-Paper.pdf?utm_source=chatgpt.com)されました。ネットワークと書いてありますが、もっと大もとの「考え方」のようなものです。
 
 ![](https://raw.githubusercontent.com/yKesamaru/Building_a_face_recognition_model_using_Siamese_Network/refs/heads/master/assets/2024-12-13-14-23-15.png)
 
@@ -71,24 +71,19 @@ $$1\text{-}1\ \text{モード} \subseteq 1\text{-}\text{多}\ \text{モード}$$
 このネットワークは、2つの入力を受け取り、それらの類似度を学習する構造を持っています。
 
 ### 主な特徴
-Siamese Networkは、同一構造の2つのサブネットワークで特徴を抽出し、その類似性を計算します。この構造により、「1対1」タスクに特化した高い性能を発揮します。
+Siamese Networkは、同一構造の2つのサブネットワークで特徴を抽出し、その類似性を計算する、という考え方です。シンプルな考え方なので、実装も容易です。
 
 ![](https://raw.githubusercontent.com/yKesamaru/Building_a_face_recognition_model_using_Siamese_Network/refs/heads/master/assets/2024-12-13-14-27-59.png)
 
 ## Siamese Networkにおけるバックボーン
-Siamese Networkの性能は、バックボーンによって大きく左右されます。
+Siamese Networkは、なにをバックボーンにするかで実装が変わってきます。
 
-### 概要
-EfficientNetV2やResNetなど、高性能なバックボーンを利用することで、入力画像から有用な特徴を効率的に抽出できます。
+EfficientNetV2やResNetなどを利用することで、入力画像から特徴量を抽出（入力データを低次元の特徴ベクトルに変換）します。
 
-### バックボーンの役割
-バックボーンを特徴抽出器として機能させ、入力データを低次元の特徴ベクトルに変換します。
-
-### ネットワーク全体の役割
 Siamese Networkでは、バックボーンで抽出された特徴ベクトルを比較し、入力ペアの類似性を判定します。
 
-## Siamese Networkに最適な損失関数
-Siamese Networkでは、以下のような損失関数を使用して類似度を学習します。
+## よく使われる損失関数
+Siamese Networkでは、以下のような損失関数をよく使います。
 
 ### Contrastive Loss
 Siamese Networkにおいて最も一般的です。
@@ -97,7 +92,7 @@ $$L = \frac{1}{2} \left( Y D^2 + (1 - Y) \max(\text{margin} - D, 0)^2 \right)
 $$
 
 ### Triplet Loss
-Triplet Lossは、アンカー、ポジティブ、ネガティブの3つの入力を用いて類似性を最適化します。この損失関数は、埋め込み空間での識別性を向上させる効果があります。dlibの学習済みモデルはこのトリプレットロスを採用しています。
+Triplet Lossは、アンカー、ポジティブ、ネガティブの3つの入力を用いて類似性を最適化します。この損失関数は、埋め込み空間での識別性を向上させる効果があります。[dlib](http://dlib.net/)の学習済みモデルはこのトリプレットロスを採用しています。
 
 $$L = \max(D(a, p) - D(a, n) + \text{margin}, 0)$$
 
@@ -106,7 +101,7 @@ $$L = \max(D(a, p) - D(a, n) + \text{margin}, 0)$$
 - $\text{margin}$: ポジティブとネガティブサンプルの距離の差を保証するためのマージン。
 
 ### Binary Cross-Entropy Loss
-Binary Cross-Entropy Lossは、2つの入力が同一か否かを確率的に予測する損失関数です。主に類似度を確率として出力したい場合に使用されます。
+2つの入力が同一か否かを確率的に予測します。
 
 $$L = - \frac{1}{N} \sum_{i=1}^N \left[ y_i \log(\hat{y}_i) + (1 - y_i) \log(1 - \hat{y}_i) \right]$$
 
@@ -114,21 +109,24 @@ $$L = - \frac{1}{N} \sum_{i=1}^N \left[ y_i \log(\hat{y}_i) + (1 - y_i) \log(1 -
 - $\hat{y}_i$: モデルの予測確率（0〜1）。
 - $N$: サンプル数。
 
-## Siamese Networkで必要なID数（クラス数）の見積もり
+## 必要なID数（クラス数）の見積もり
 
 ### ID数よりペア数が重要
 1対1認証では、IDの数そのものよりも生成可能なペアの数が重要です。
-- **同一ID内（Positiveペア）** 同一人物間でのペア。
-- **異なるID間（Negativeペア）** 異なる人物間でのペア。
+- **同一ID内（Positiveペア）**
+  - 同一人物間でのペア。
+- **異なるID間（Negativeペア）**
+  - 異なる人物間でのペア。
 
 ### 推奨されるID数の目安
-- **小規模タスク** 数百ID。
+- **小規模タスク** 1000ID。
 - **中規模タスク** 1000～2000ID。
 - **大規模タスク** 5000ID以上。
 
-その他、ペアの多様性や各IDに含まれる画像数がモデルの性能に影響を与えるため、顔画像データセットの質が重要です。
+その他、ペアの多様性や各IDに含まれる画像数がモデルの性能に影響を与えるため、顔画像データセットの質が重要です。（コレ自体でいくらでも精度が変わってしまう。。）
 
 ## オプティマイザとスケジューラの選択
+学習をやっている方々だと、「いつもコレ」という組み合わせがあるものです。わたしの推しは特に無いのですが、よく見かける組み合わせを記載します。簡単に説明をつけますが、結局「近くにいる詳しい人が使ってるのを使え」が多分正しいです。
 
 ### Adam + CosineAnnealingLR
 - **適用シーン**
@@ -177,19 +175,19 @@ $$L = - \frac{1}{N} \sum_{i=1}^N \left[ y_i \log(\hat{y}_i) + (1 - y_i) \log(1 -
 初期試行には鉄板の「Adam + CosineAnnealingLR」、大規模学習には「SGD + StepLR」、学習が不安定な場合には「Ranger + ExponentialLR」といった形が代表的です。個人的には[schedule_free](https://github.com/facebookresearch/schedule_free)に期待を寄せています。
 
 ## [PyTorch Metric Learning](https://kevinmusgrave.github.io/pytorch-metric-learning/)
-PyTorch Metric Learningは、Siamese Networkやトリプレットロスを用いた学習を簡単にするためのライブラリです。
+PyTorch Metric Learningは、マイニングやトリプレットロスを用いた学習を簡単にするためのライブラリです。
 
 **特徴**
 - Contrastive LossやTriplet Lossをサポート。
-- ハードネガティブマイニング機能が付属。
+- ハードネガティブマイニング機能あり。（頑強なモデルがほしいなら）
 
 **利点**
 - モジュールが豊富でカスタマイズが容易。
-- ドキュメントが充実しており初心者にも扱いやすい。
+- ドキュメントが充実してて扱いやすい。
 
-## Siamese Networkの実装例
+## 実装例
 
-以下はSiamese NetworkをEfficientNetV2をバックボーンとして構築し、Triplet Lossを使用した学習コードです。
+以下はEfficientNetV2をバックボーンとしTriplet Lossを使用した学習コードです。
 
 ```python: siamese_network_training.py
 """siamese_network_training.py.
@@ -481,7 +479,8 @@ if __name__ == "__main__":
 
 ### 検証結果
 ![](https://raw.githubusercontent.com/yKesamaru/Building_a_face_recognition_model_using_Siamese_Network/refs/heads/master/assets/2024-12-14-10-33-43.png)
-上記の画像で学習した後、以下の画像で類似度を計算しました。
+
+上記の画像で学習した後、以下の**学習に使っていない画像**で類似度を計算しました。
 
 ![](https://raw.githubusercontent.com/yKesamaru/Building_a_face_recognition_model_using_Siamese_Network/refs/heads/master/assets/2024-12-14-10-34-46.png)
 
@@ -496,16 +495,20 @@ if __name__ == "__main__":
 
 それでは既存のクラスだけではなく、未知のクラスへの汎用性はどうでしょうか？
 
-検証のために、学習では用いなかった20クラス分のフォルダを用意し、それぞれに50枚程度の顔画像をセットしました。
+検証のために、**学習では用いなかった20クラス分（未知の20人）**のフォルダを用意し、それぞれに50枚程度の顔画像をセットしました。
 
-`aoc_plot_siamese.py`というAUCスコアとROC曲線をプロットするコードを書いて検証します。
+`aoc_plot_siamese_1-N.py`というAUCスコアとROC曲線をプロットするコードを書いて検証します。
+
+このコードはそのファイル名が示すとおり、1対多モード用の精度検証用コードです。まずはこちらで汎化性能をみてみます。
 
 ```python: aoc_plot_siamese.py
-"""aoc_plot_siamese.py.
+"""aoc_plot_siamese_1-N.py.
 
 Summary:
     このスクリプトは、学習済みのSiamese Networkモデルを用いて
     ROC曲線（AOC曲線）をプロットするためのコードです。
+    このスクリプトは1対1モードではなく、1対Nモードの精度を検証します。
+    1対1モードで学習されたモデルを評価した場合、一般的に精度は低く出力されます。
 
     主な機能:
     - 検証用データセットから埋め込みベクトルを生成。
@@ -674,13 +677,211 @@ if __name__ == "__main__":
 
 さすがに10クラスしか学習していない学習済みモデルでは、未知の20クラスに対してまともな精度は出せないですね。
 
-現在、2000クラスに対して学習をさせているところですが、記事作成時点で1エポックしか終わってませんでした。先は長そうです。
+とはいえ、今のは1対多モード用のコードでした。次は1対1モード用のROC曲線作成コード（`aoc_plot_siamese_1-N.py`）を用意して実行してみます。
+
+```python
+"""aoc_plot_siamese_1-N.py.
+
+Summary:
+    このスクリプトは、学習済みのSiamese Networkモデルを用いて
+    ROC曲線（AOC曲線）をプロットするためのコードです。
+    このスクリプトは1対1モードではなく、1対Nモードの精度を検証します。
+    1対1モードで学習されたモデルを評価した場合、一般的に精度は低く出力されます。
+
+    主な機能:
+    - 検証用データセットから埋め込みベクトルを生成。
+    - 埋め込みベクトル間のコサイン類似度を計算。
+    - ROC曲線を描画し、AUCスコアを算出。
+    - プロット画像をカレントディレクトリに保存。
+
+License:
+    This script is licensed under the terms provided by yKesamaru, the original author.
+"""
+
+import matplotlib.pyplot as plt
+import torch
+import torch.nn as nn
+from sklearn.metrics import roc_auc_score, roc_curve
+from timm import create_model
+from torchvision import datasets, transforms
+from tqdm import tqdm
+
+
+# SiameseNetworkクラスの定義
+class SiameseNetwork(nn.Module):
+    """
+    Siamese Networkのクラス定義。
+    EfficientNetV2をバックボーンとして使用。
+
+    Args:
+        embedding_dim (int): 埋め込みベクトルの次元数。
+    """
+    def __init__(self, embedding_dim=512):
+        super(SiameseNetwork, self).__init__()
+        self.backbone = create_model('tf_efficientnetv2_b0.in1k', pretrained=True, num_classes=0)
+        num_features = self.backbone.num_features
+        self.embedder = nn.Linear(num_features, embedding_dim)
+
+    def forward(self, x):
+        return self.embedder(self.backbone(x))
+
+
+# 学習済みモデルの読み込み
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+model_path = "/home/user/bin/pytorch-metric-learning/saved_models/model_epoch8_loss0.0010.pth"
+model = SiameseNetwork(embedding_dim=512)  # 学習時と同じモデル構造を再現
+model.load_state_dict(torch.load(model_path, map_location=device))
+model.eval().to(device)
+
+# 検証用データのパス
+test_data_dir = "/home/user/bin/pytorch-metric-learning/otameshi_kensho/"
+
+# 検証用データの変換
+test_transform = transforms.Compose([
+    transforms.Resize((224, 224)),
+    transforms.ToTensor(),
+    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+])
+
+# データセットの作成
+test_dataset = datasets.ImageFolder(root=test_data_dir, transform=test_transform)
+test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=1, shuffle=False)
+
+
+def calculate_similarity(embedding1, embedding2):
+    """
+    埋め込みベクトル間のコサイン類似度を計算する。
+
+    Args:
+        embedding1 (torch.Tensor): 埋め込みベクトル1。
+        embedding2 (torch.Tensor): 埋め込みベクトル2。
+
+    Returns:
+        float: コサイン類似度。
+    """
+    return torch.nn.functional.cosine_similarity(embedding1, embedding2).item()
+
+
+def compute_embeddings(loader, model):
+    """
+    データローダーを用いて埋め込みベクトルを計算。
+
+    Args:
+        loader (torch.utils.data.DataLoader): データローダー。
+        model (torch.nn.Module): 学習済みSiameseモデル。
+
+    Returns:
+        dict: クラスごとの埋め込みベクトルの辞書。
+    """
+    embeddings = {}
+    for img, label in tqdm(loader, desc="Computing Embeddings"):
+        with torch.no_grad():
+            img = img.to(device)
+            embedding = model(img)
+            embeddings[label.item()] = embeddings.get(label.item(), []) + [embedding]
+    return embeddings
+
+
+def calculate_similarities_and_labels(embeddings):
+    """
+    クラスごとの埋め込みベクトルを用いて類似度とラベルを計算。
+
+    Args:
+        embeddings (dict): クラスごとの埋め込みベクトルの辞書。
+
+    Returns:
+        tuple: 類似度リスト、ラベルリスト。
+    """
+    similarities = []
+    labels = []
+    class_keys = list(embeddings.keys())
+
+    for i, class_label_1 in enumerate(class_keys):
+        for embedding1 in embeddings[class_label_1]:
+            # 同じクラスとの比較（ラベル=1）
+            for embedding2 in embeddings[class_label_1]:
+                if not torch.equal(embedding1, embedding2):  # 同じ画像はスキップ
+                    sim = calculate_similarity(embedding1, embedding2)
+                    similarities.append(sim)
+                    labels.append(1)  # 同じクラスはラベル1
+
+            # 異なるクラスとの比較（ラベル=0）
+            for j, class_label_2 in enumerate(class_keys):
+                if i != j:  # 異なるクラスのみ
+                    for embedding2 in embeddings[class_label_2]:
+                        sim = calculate_similarity(embedding1, embedding2)
+                        similarities.append(sim)
+                        labels.append(0)  # 異なるクラスはラベル0
+
+    return similarities, labels
+
+
+def plot_roc_curve(similarities, labels, output_path="roc_curve.png"):
+    """
+    ROC曲線をプロットし、画像として保存する。
+
+    Args:
+        similarities (list): 類似度リスト。
+        labels (list): ラベルリスト。
+        output_path (str): プロット画像の保存パス。
+    """
+    fpr, tpr, thresholds = roc_curve(labels, similarities)
+    auc = roc_auc_score(labels, similarities)
+
+    plt.figure(figsize=(8, 6))
+    plt.plot(fpr, tpr, label=f"AUC = {auc:.4f}")
+    plt.xlabel("False Positive Rate")
+    plt.ylabel("True Positive Rate")
+    plt.title("ROC Curve")
+    plt.legend()
+    plt.grid()
+    plt.savefig(output_path)  # 画像を保存
+    plt.show()
+
+
+if __name__ == "__main__":
+    # 埋め込みベクトルの計算
+    embeddings = compute_embeddings(test_loader, model)
+
+    # 類似度とラベルの計算
+    similarities, labels = calculate_similarities_and_labels(embeddings)
+
+    # ROC曲線のプロットと保存
+    plot_roc_curve(similarities, labels, output_path="roc_curve.png")
+
+```
+
+![](https://raw.githubusercontent.com/yKesamaru/Building_a_face_recognition_model_using_Siamese_Network/refs/heads/master/assets/roc_curve_1to1.png)
+
+orz...
+さっきより悪い結果が出ました。
+
+まぁ、10クラス（各クラス50枚程度の顔画像ファイル）で10エポックしか学習していないわけですからこんなものです。まともな結果を出したければ1000クラス以上（各クラス100枚以上の顔画像ファイル）がどうしたって必要です。
+
+とはいえ、記事作成用の学習ならこれくらいでいっか…と考えていたのですが、さすがに悔しくなりました。
+
+現在、2000クラスに対して学習をさせているところです。
+
+…が、記事作成時点で1エポックしか終わってませんでした。先は長そうです。
 
 
 ## さいごに
-本記事ではSiamese Networkを用いた1対1モードの学習モデルを作成するためのコードを作成しました。
+本記事ではSiamese Networkを用いた1対1モードの学習モデルを作成するためのコードを作成・実行・検証しました。
 
-このコードを眺めて「どこら辺がSiamese Network？」と感じた方はぜひ[はやぶさの技術ノート: 【深層距離学習】Siamese NetworkとContrastive Lossを徹底解説](https://cpp-learning.com/siamese-network/)をご参照ください。とてもわかり易いです。
+1対1モードがどういうものか、認証界隈の解説（認証のスコープなど）も簡単ですが加えました。
+
+データセットとGPUがあれば、あなた専用の学習モデルが作れちゃいますね😀
+
+以上です。ありがとうございました。
+
+## おまけ
+1対多モードの学習モデルは`JAPANESE FACE V1`として以下で配布してます。
+
+https://github.com/yKesamaru/FACE01_trained_models
+
+使ってみてね⭐️
+
+![](https://raw.githubusercontent.com/yKesamaru/Building_a_face_recognition_model_using_Siamese_Network/refs/heads/master/assets/2024-12-14-22-36-04.png)
 
 ## 文献・参考サイト
 - [Siamese NetworkとContrastive Lossを徹底解説 - はやぶさの技術ノート](https://cpp-learning.com/siamese-network/)
