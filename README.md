@@ -1,7 +1,7 @@
 # Siamese Networkを用いた顔認識モデルの構築
 
 ## はじめに
-顔認識システムを構築する際に、**「1対1」モードと「1対多」モード**という2つの主要な手法があります。本記事では、特に「1対1」モードに焦点を当て、**Siamese Network（シャムネットワーク）を用いた顔認識モデルの設計と構築**について詳しく解説し、最後に実行可能なコードを紹介します。
+顔認識システムを構築する際に、**「1対1」モードと「1対多」モード**という2つの主要な手法があります。本記事では、特に「1対1」モードに焦点を当て、**Siamese Network（シャムネットワーク）を用いた顔認識モデルの設計と構築**について詳しく解説し、最後に実行可能なコードを紹介し、10クラス学習させた後のAUCスコアとROC曲線をプロットします。
 
 ![](https://raw.githubusercontent.com/yKesamaru/Building_a_face_recognition_model_using_Siamese_Network/refs/heads/master/assets/eye-catch.png)
 
