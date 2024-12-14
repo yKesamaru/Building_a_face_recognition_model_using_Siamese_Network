@@ -3,7 +3,7 @@
 ## はじめに
 顔認識システムを構築する際に、**「1対1」モードと「1対多」モード**という2つの主要な手法があります。本記事では、特に「1対1」モードに焦点を当て、**Siamese Network（シャムネットワーク）を用いた顔認識モデルの設計と構築**について詳しく解説し、最後に実行可能なコードを紹介します。
 
-![](assets/eye-catch.png)
+![](https://raw.githubusercontent.com/yKesamaru/Building_a_face_recognition_model_using_Siamese_Network/refs/heads/master/assets/eye-catch.png)
 
 ## 顔認証タスクのスコープ
 一口に顔認証システムといっても、どのようなシーンで使われるのかの想定によって、システム構成が異なってきます。具体的には、使用される学習済みモデルが異なってくる、ということです。
@@ -13,14 +13,12 @@
 
 このようなスコープで使われるのは1対1認証です。 小規模タスクで用いられます。
 
-![https//jp.fujitsu.com/platform/pc/product/related/security/auth.html](assets/shimon_esprimo2.jpg)
+![https//jp.fujitsu.com/platform/pc/product/related/security/auth.html](https://raw.githubusercontent.com/yKesamaru/Building_a_face_recognition_model_using_Siamese_Network/refs/heads/master/assets/shimon_esprimo2.jpg)
 
 ### 中規模タスク
 公共の顔認識がこのスコープに含まれます。防犯カメラの映像解析やネットを対象にしたリサーチなどですね。
 
 オープンソースで開発されている[FACE01](https//github.com/yKesamaru/FACE01_DEV)や[その学習済みモデル](https//github.com/yKesamaru/FACE01_trained_models)はここに含まれます。
-
-![](https//raw.githubusercontent.com/yKesamaru/FACE01_DEV/master/docs/img/ROMAN_HOLIDAY.GIF?raw=true)
 
 ### 大規模タスク
 全人種を対象にした顔認証システムがここに含まれます。
@@ -66,7 +64,7 @@ $$1\text{-}1\ \text{モード} \subseteq 1\text{-}\text{多}\ \text{モード}$$
 ### 概要
 [Siamese Networkは1994年にBromleyらによって提案](https//papers.nips.cc/paper/1993/file/288cc0ff022877bd3df94bc9360b9c5d-Paper.pdf?utm_source=chatgpt.com)され、当初は[手書き文字認証に使用](https//jglobal.jst.go.jp/detail?JGLOBAL_ID=201902267980547740&utm_source=chatgpt.com)されていました。
 
-![](assets/2024-12-13-14-23-15.png)
+![](https://raw.githubusercontent.com/yKesamaru/Building_a_face_recognition_model_using_Siamese_Network/refs/heads/master/assets/2024-12-13-14-23-15.png)
 
 [はやぶさの技術ノート: 【深層距離学習】Siamese NetworkとContrastive Lossを徹底解説](https://cpp-learning.com/siamese-network/)がとてもわかり易いです。
 
@@ -75,24 +73,10 @@ $$1\text{-}1\ \text{モード} \subseteq 1\text{-}\text{多}\ \text{モード}$$
 ### 主な特徴
 Siamese Networkは、同一構造の2つのサブネットワークで特徴を抽出し、その類似性を計算します。この構造により、「1対1」タスクに特化した高い性能を発揮します。
 
-![](assets/2024-12-13-14-27-59.png)
-
-## Siamese Networkが【1対1】学習に適しているワケ
-
-Siamese Networkが「1対1」モードに適している主な理由は以下の通りです。
-
-1. **類似度を直接学習する特性**
-   - 特徴ベクトル間の距離（コサイン類似度など）とトリプレットロスなどを使用し、同一人物の距離を最小化、異なる人物の距離を最大化する
-
-2. **少ないデータや限定的なタスクへの適応力**
-   - データ量が限定されている場合でも、ペア単位での学習が可能なため、少ないデータセットでも高い精度を稼げる
-
-3. **汎用性の高さ**
-   - 顔認証以外の生体認証や類似度判定タスクにも応用可能
+![](https://raw.githubusercontent.com/yKesamaru/Building_a_face_recognition_model_using_Siamese_Network/refs/heads/master/assets/2024-12-13-14-27-59.png)
 
 ## Siamese Networkにおけるバックボーン
-
-Siamese Networkの性能は、バックボーンの選択によって大きく左右されます。
+Siamese Networkの性能は、バックボーンによって大きく左右されます。
 
 ### 概要
 EfficientNetV2やResNetなど、高性能なバックボーンを利用することで、入力画像から有用な特徴を効率的に抽出できます。
@@ -101,7 +85,7 @@ EfficientNetV2やResNetなど、高性能なバックボーンを利用するこ
 バックボーンを特徴抽出器として機能させ、入力データを低次元の特徴ベクトルに変換します。
 
 ### ネットワーク全体の役割
-Siamese Networkでは、バックボーンで抽出された特徴ベクトルを比較し、入力ペアの類似性を判定します。これにより、同一人物か否かの判断が可能になります。
+Siamese Networkでは、バックボーンで抽出された特徴ベクトルを比較し、入力ペアの類似性を判定します。
 
 ## Siamese Networkに最適な損失関数
 Siamese Networkでは、以下のような損失関数を使用して類似度を学習します。
@@ -130,10 +114,10 @@ $$L = - \frac{1}{N} \sum_{i=1}^N \left[ y_i \log(\hat{y}_i) + (1 - y_i) \log(1 -
 - $\hat{y}_i$: モデルの予測確率（0〜1）。
 - $N$: サンプル数。
 
-## Siamese Networkで必要なID数の見積もり
+## Siamese Networkで必要なID数（クラス数）の見積もり
 
 ### ID数よりペア数が重要
-Siamese Networkでは、IDの数そのものよりも生成可能なペアの数が重要です。
+1対1認証では、IDの数そのものよりも生成可能なペアの数が重要です。
 - **同一ID内（Positiveペア）** 同一人物間でのペア。
 - **異なるID間（Negativeペア）** 異なる人物間でのペア。
 
@@ -192,9 +176,7 @@ Siamese Networkでは、IDの数そのものよりも生成可能なペアの数
 
 初期試行には鉄板の「Adam + CosineAnnealingLR」、大規模学習には「SGD + StepLR」、学習が不安定な場合には「Ranger + ExponentialLR」といった形が代表的です。個人的には[schedule_free](https://github.com/facebookresearch/schedule_free)に期待を寄せています。
 
-## Siamese Networkやトリプレットロスを用いて学習する際の便利なライブラリ
-
-### [PyTorch Metric Learning](https://kevinmusgrave.github.io/pytorch-metric-learning/)
+## [PyTorch Metric Learning](https://kevinmusgrave.github.io/pytorch-metric-learning/)
 PyTorch Metric Learningは、Siamese Networkやトリプレットロスを用いた学習を簡単にするためのライブラリです。
 
 **特徴**
@@ -227,6 +209,8 @@ Example:
     1. `data_dir`にデータセットのパスを指定してください。
     2. スクリプトを実行し、TensorBoardで進捗を確認してください（`tensorboard --logdir=runs`を使用）。
 
+License:
+    This script is licensed under the terms provided by yKesamaru, the original author.
 """
 import os
 
@@ -372,11 +356,145 @@ writer.close()
 
 ```
 
+## 検証
+`siamese_network_training.py`を10エポック動作させ`model_epoch8_loss0.0010.pth`を得ました。ファイル名に`epoch8`とあるのは、8エポック目以降にロスが減少しなかったためです。
+
+![](https://raw.githubusercontent.com/yKesamaru/Building_a_face_recognition_model_using_Siamese_Network/refs/heads/master/assets/2024-12-14-10-20-53.png)
+
+
+### 検証コード
+```python: siamese_inference.py
+"""siamese_inference.py.
+
+Summary:
+    このスクリプトは、学習済みのSiamese Networkモデルを使用して2つの画像間の類似度を計算します。
+
+    主な機能:
+    - 学習済みモデルのロード
+    - 画像の前処理
+    - 特徴ベクトルの抽出
+    - コサイン類似度の計算
+
+Example:
+    python siamese_inference.py --model_path path/to/saved_model.pth --img1 path/to/image1.png --img2 path/to/image2.png
+
+License:
+    This script is licensed under the terms provided by yKesamaru, the original author.
+"""
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from timm import create_model
+from torchvision import transforms
+from PIL import Image
+import argparse
+
+
+# Siamese Networkの定義
+class SiameseNetwork(nn.Module):
+    def __init__(self, embedding_dim=512):
+        super(SiameseNetwork, self).__init__()
+        self.backbone = create_model('tf_efficientnetv2_b0.in1k', pretrained=False, num_classes=0)
+        num_features = self.backbone.num_features
+        self.embedder = nn.Linear(num_features, embedding_dim)
+
+    def forward(self, x):
+        return self.embedder(self.backbone(x))
+
+
+def load_model(model_path, embedding_dim=512):
+    """学習済みモデルをロードします。
+
+    Args:
+        model_path (str): モデルファイルのパス
+        embedding_dim (int): 埋め込みベクトルの次元数
+
+    Returns:
+        SiameseNetwork: ロードされたモデル
+    """
+    model = SiameseNetwork(embedding_dim)
+    model.load_state_dict(torch.load(model_path, map_location="cpu"))
+    model.eval()
+    return model
+
+
+def preprocess_image(image_path):
+    """画像を前処理します。
+
+    Args:
+        image_path (str): 画像ファイルのパス
+
+    Returns:
+        torch.Tensor: 前処理済みの画像テンソル
+    """
+    transform = transforms.Compose([
+        transforms.Resize((224, 224)),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+    ])
+    img = Image.open(image_path).convert("RGB")
+    return transform(img).unsqueeze(0)  # バッチ次元を追加
+
+
+def compute_similarity(model, img1_path, img2_path):
+    """2つの画像間の類似度を計算します。
+
+    Args:
+        model (SiameseNetwork): Siamese Networkモデル
+        img1_path (str): 1枚目の画像のパス
+        img2_path (str): 2枚目の画像のパス
+
+    Returns:
+        float: コサイン類似度
+    """
+    img1_tensor = preprocess_image(img1_path)
+    img2_tensor = preprocess_image(img2_path)
+    with torch.no_grad():
+        embedding1 = model(img1_tensor)
+        embedding2 = model(img2_tensor)
+    similarity = F.cosine_similarity(embedding1, embedding2).item()
+    return similarity
+
+
+def main():
+    # 引数を解析
+    parser = argparse.ArgumentParser(description="Siamese Networkを用いた画像間類似度計算")
+    parser.add_argument("--model_path", type=str, required=True, help="学習済みモデルのパス")
+    parser.add_argument("--img1", type=str, required=True, help="1枚目の画像のパス")
+    parser.add_argument("--img2", type=str, required=True, help="2枚目の画像のパス")
+    args = parser.parse_args()
+
+    # モデルのロード
+    print("モデルをロード中...")
+    model = load_model(args.model_path)
+
+    # 類似度の計算
+    print("類似度を計算中...")
+    similarity = compute_similarity(model, args.img1, args.img2)
+    print(f"画像間の類似度: {similarity:.4f}")
+
+
+if __name__ == "__main__":
+    main()
+
+```
+
+### 検証結果
+![](https://raw.githubusercontent.com/yKesamaru/Building_a_face_recognition_model_using_Siamese_Network/refs/heads/master/assets/2024-12-14-10-33-43.png)
+上記の画像で学習した後、以下の画像で類似度を計算しました。
+
+![](https://raw.githubusercontent.com/yKesamaru/Building_a_face_recognition_model_using_Siamese_Network/refs/heads/master/assets/2024-12-14-10-34-46.png)
+
+```bash
+(pytorch-metric-learning) user@user:~/bin/pytorch-metric-learning$ python siamese_inference.py --model_path /home/user/bin/pytorch-metric-learning/saved_models/model_epoch8_loss0.0010.pth --img1 /home/user/bin/pytorch-metric-learning/otameshi_data/つじかりん/つじかりん_wplw.jpeg..png.png.png_0_align_resize_refined.png --img2  /home/user/bin/pytorch-metric-learning/otameshi_data/つじかりん/つじかりん.png
+モデルをロード中...
+類似度を計算中...
+画像間の類似度: 0.9428
+```
+
+**類似度は0.9428**となり、本人であることが強く示唆されました。
+
 ## さいごに
-`siamese_network_training.py`を実際に動作させましたが、この記事を書き終わるまでに学習が終わりませんでした。
-
-![](assets/2024-12-13-22-18-35.png)
-
 本記事ではSiamese Networkを用いた1対1モードの学習モデルを作成するためのコードを作成しました。
 
 このコードを眺めて「どこら辺がSiamese Network？」と感じた方はぜひ[はやぶさの技術ノート: 【深層距離学習】Siamese NetworkとContrastive Lossを徹底解説](https://cpp-learning.com/siamese-network/)をご参照ください。とてもわかり易いです。
