@@ -357,7 +357,7 @@ writer.close()
 ```
 
 ## 検証
-`siamese_network_training.py`を10エポック動作させ`model_epoch8_loss0.0010.pth`を得ました。ファイル名に`epoch8`とあるのは、8エポック目以降にロスが減少しなかったためです。
+10クラス分のフォルダを用意し、それぞれに50枚程度の顔画像をセットし、`siamese_network_training.py`を10エポック動作させ`model_epoch8_loss0.0010.pth`を得ました。ファイル名に`epoch8`とあるのは、8エポック目以降にロスが減少しなかったためです。
 
 ![](https://raw.githubusercontent.com/yKesamaru/Building_a_face_recognition_model_using_Siamese_Network/refs/heads/master/assets/2024-12-14-10-20-53.png)
 
@@ -493,6 +493,189 @@ if __name__ == "__main__":
 ```
 
 **類似度は0.9428**となり、本人であることが強く示唆されました。
+
+それでは既存のクラスだけではなく、未知のクラスへの汎用性はどうでしょうか？
+
+検証のために、学習では用いなかった20クラス分のフォルダを用意し、それぞれに50枚程度の顔画像をセットしました。
+
+`aoc_plot_siamese.py`というAUCスコアとROC曲線をプロットするコードを書いて検証します。
+
+```python: aoc_plot_siamese.py
+"""aoc_plot_siamese.py.
+
+Summary:
+    このスクリプトは、学習済みのSiamese Networkモデルを用いて
+    ROC曲線（AOC曲線）をプロットするためのコードです。
+
+    主な機能:
+    - 検証用データセットから埋め込みベクトルを生成。
+    - 埋め込みベクトル間のコサイン類似度を計算。
+    - ROC曲線を描画し、AUCスコアを算出。
+    - プロット画像をカレントディレクトリに保存。
+
+License:
+    This script is licensed under the terms provided by yKesamaru, the original author.
+"""
+
+import matplotlib.pyplot as plt
+import torch
+import torch.nn as nn
+from sklearn.metrics import roc_auc_score, roc_curve
+from timm import create_model
+from torchvision import datasets, transforms
+from tqdm import tqdm
+
+
+# SiameseNetworkクラスの定義
+class SiameseNetwork(nn.Module):
+    """
+    Siamese Networkのクラス定義。
+    EfficientNetV2をバックボーンとして使用。
+
+    Args:
+        embedding_dim (int): 埋め込みベクトルの次元数。
+    """
+    def __init__(self, embedding_dim=512):
+        super(SiameseNetwork, self).__init__()
+        self.backbone = create_model('tf_efficientnetv2_b0.in1k', pretrained=True, num_classes=0)
+        num_features = self.backbone.num_features
+        self.embedder = nn.Linear(num_features, embedding_dim)
+
+    def forward(self, x):
+        return self.embedder(self.backbone(x))
+
+
+# 学習済みモデルの読み込み
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+model_path = "/home/user/bin/pytorch-metric-learning/saved_models/model_epoch8_loss0.0010.pth"
+model = SiameseNetwork(embedding_dim=512)  # 学習時と同じモデル構造を再現
+model.load_state_dict(torch.load(model_path, map_location=device))
+model.eval().to(device)
+
+# 検証用データのパス
+test_data_dir = "/home/user/bin/pytorch-metric-learning/otameshi_kensho/"
+
+# 検証用データの変換
+test_transform = transforms.Compose([
+    transforms.Resize((224, 224)),
+    transforms.ToTensor(),
+    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+])
+
+# データセットの作成
+test_dataset = datasets.ImageFolder(root=test_data_dir, transform=test_transform)
+test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=1, shuffle=False)
+
+
+def calculate_similarity(embedding1, embedding2):
+    """
+    埋め込みベクトル間のコサイン類似度を計算する。
+
+    Args:
+        embedding1 (torch.Tensor): 埋め込みベクトル1。
+        embedding2 (torch.Tensor): 埋め込みベクトル2。
+
+    Returns:
+        float: コサイン類似度。
+    """
+    return torch.nn.functional.cosine_similarity(embedding1, embedding2).item()
+
+
+def compute_embeddings(loader, model):
+    """
+    データローダーを用いて埋め込みベクトルを計算。
+
+    Args:
+        loader (torch.utils.data.DataLoader): データローダー。
+        model (torch.nn.Module): 学習済みSiameseモデル。
+
+    Returns:
+        dict: クラスごとの埋め込みベクトルの辞書。
+    """
+    embeddings = {}
+    for img, label in tqdm(loader, desc="Computing Embeddings"):
+        with torch.no_grad():
+            img = img.to(device)
+            embedding = model(img)
+            embeddings[label.item()] = embeddings.get(label.item(), []) + [embedding]
+    return embeddings
+
+
+def calculate_similarities_and_labels(embeddings):
+    """
+    クラスごとの埋め込みベクトルを用いて類似度とラベルを計算。
+
+    Args:
+        embeddings (dict): クラスごとの埋め込みベクトルの辞書。
+
+    Returns:
+        tuple: 類似度リスト、ラベルリスト。
+    """
+    similarities = []
+    labels = []
+    class_keys = list(embeddings.keys())
+
+    for i, class_label_1 in enumerate(class_keys):
+        for embedding1 in embeddings[class_label_1]:
+            # 同じクラスとの比較（ラベル=1）
+            for embedding2 in embeddings[class_label_1]:
+                if not torch.equal(embedding1, embedding2):  # 同じ画像はスキップ
+                    sim = calculate_similarity(embedding1, embedding2)
+                    similarities.append(sim)
+                    labels.append(1)  # 同じクラスはラベル1
+
+            # 異なるクラスとの比較（ラベル=0）
+            for j, class_label_2 in enumerate(class_keys):
+                if i != j:  # 異なるクラスのみ
+                    for embedding2 in embeddings[class_label_2]:
+                        sim = calculate_similarity(embedding1, embedding2)
+                        similarities.append(sim)
+                        labels.append(0)  # 異なるクラスはラベル0
+
+    return similarities, labels
+
+
+def plot_roc_curve(similarities, labels, output_path="roc_curve.png"):
+    """
+    ROC曲線をプロットし、画像として保存する。
+
+    Args:
+        similarities (list): 類似度リスト。
+        labels (list): ラベルリスト。
+        output_path (str): プロット画像の保存パス。
+    """
+    fpr, tpr, thresholds = roc_curve(labels, similarities)
+    auc = roc_auc_score(labels, similarities)
+
+    plt.figure(figsize=(8, 6))
+    plt.plot(fpr, tpr, label=f"AUC = {auc:.4f}")
+    plt.xlabel("False Positive Rate")
+    plt.ylabel("True Positive Rate")
+    plt.title("ROC Curve")
+    plt.legend()
+    plt.grid()
+    plt.savefig(output_path)  # 画像を保存
+    plt.show()
+
+
+if __name__ == "__main__":
+    # 埋め込みベクトルの計算
+    embeddings = compute_embeddings(test_loader, model)
+
+    # 類似度とラベルの計算
+    similarities, labels = calculate_similarities_and_labels(embeddings)
+
+    # ROC曲線のプロットと保存
+    plot_roc_curve(similarities, labels, output_path="roc_curve.png")
+
+```
+
+![](https://raw.githubusercontent.com/yKesamaru/Building_a_face_recognition_model_using_Siamese_Network/refs/heads/master/assets/roc_curve.png)
+
+さすがに10クラスしか学習していない学習済みモデルでは、未知の20クラスに対してまともな精度は出せないですね。
+
+現在、2000クラスに対して学習をさせているところですが、記事作成時点で1エポックしか終わってませんでした。先は長そうです。
+
 
 ## さいごに
 本記事ではSiamese Networkを用いた1対1モードの学習モデルを作成するためのコードを作成しました。
