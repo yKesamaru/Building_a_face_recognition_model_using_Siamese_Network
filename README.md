@@ -1,33 +1,104 @@
-# Siamese Networkを用いた顔認識モデルの構築
+## 対象とする読者
+- MNIST（手書き数字認識）の次に何をしていいかわからない方
+- 顔認識に興味がある方
+- 画像認識の実践的なスキルを身につけたい方
+- AIに興味がある高校生や大学生
 
-## はじめに
-顔認識システムを構築する際に、**「1対1」モードと「1対多」モード**という2つの主要な手法があります。本記事では、特に「1対1」モードに焦点を当て、**Siamese Network（シャムネットワーク）を用いた顔認識モデルの設計と構築**について詳しく解説し、最後に実行可能なコードを紹介し、10クラス学習させた後のAUCスコアとROC曲線をプロットします。
+## はじめに: 挑戦への動機づけ
+手書き数字（0〜9）を識別するプログラム「MNIST」は、機械学習、特に深層学習の入門として有名で、機械学習の「Hello World」と呼ばれるほど広く利用されています。電子工作で例えると、ラズベリーパイの「Lチカ」に相当すると思います。
+
+それで次は何をしたらいいでしょう？
+
+わたしの推しは、ずばり「顔認識」です。
+
+え？YouTubeに色々あるって？いえいえ。ここだけの話ですが、あれって全部、既にあるサービス・ライブラリの利用方法を解説してるだけなんです。だいたい3つのパターンな感じです。
+
+1. Pythonのライブラリを使用した顔認識の実装パターン
+   - face-recognitionライブラリを使用した顔認識の実装方法を解説
+   - OpenCV、Dlib、face_recognitionなどのライブラリを使用した顔認識の実装方法の紹介
+
+2. 特定のフレームワークを活用したパターン
+   - PythonライブラリのStreamlitとAzure Face APIを組み合わせた顔検出アプリ作成解説
+   - FACE01という顔認識フレームワークを使用した動画からの顔画像データ抽出方法
+
+3. 顔認識サービスのクラウドAPIを利用するパターン
+   - Google Cloud Vision APIを使用した顔検出機能の紹介: 動画内の顔の検出、境界ボックスの生成、顔の属性検出。
+   - Microsoft Face API、Amazon Rekognition、IBM Watson Visual Recognition APIなどの、クラウドサービスの顔認識機能の比較と使用方法の紹介
+
+これら全てに共通しているのは、**既にある学習済みモデルを利用している**、ということなんです。
+
+でもMNISTでは手書き数字を認識するための**学習モデルをつくるコードを作り、学習させて、検証まで**やりました。
+
+MNISTの場合は0〜9までの10クラス分類でした。MNISTの次に挑戦するなら、クラス数を増やした学習です。
+
+CIFAR-100, Fashion-MNIST, Kuzushiji-Kanjiなどありますが、どうせなら実用的なものをやりたいですよね。
+
+オープンセット分類をご存知ですか？
+
+不良品の画像診断なんかに用いられるのですが、一言で言えば「クラス数無制限の分類」です。この分類は**工場や農家で実際に使われている**のです。
+
+だから、**MNISTを卒業したら、オープンセット分類をやりましょう！**
+
+とはいえ、画像データセットを用意するのはなかなか大変です。不良品のネジとか形の崩れたきゅうりの画像を沢山集めるのは現実的ではありません。
+
+そこで偉大な先人たちは
+
+- 大好きなアイドルの顔分類
+- ポケモンの分類
+
+などを「自らの修練」として選んだのです[^1]。
+[^1]: 中にはごついお兄さんのデータセットを選んでしまい、やらなければよかったと撃沈した勇者もいました。
+
+しかしそうした偉人たちはさらに修練を進め、今ではより高みに登ってしまったがゆえ、今だったらこういうコードを書くのに、という状況に対応していません。
+
+2024年、いや、2025年に是非挑戦してほしいオープンセット分類。イマドキのやり方で挑戦しませんか？
+
+この記事を読み、この記事のコードを使えば、学習用のコードを動作させ、出来上がったモデルを検証することが出来ます。
+
+さらに前処理済みの[顔データセットも付属](https://github.com/yKesamaru/Building_a_face_recognition_model_using_Siamese_Network)します！！スクレイピングや前処理の必要が無いのは嬉しいですね⭐️[^2]
+
+[^2]: もちろん、これらを使って商用利用したり配布したらダメですよ！
+
+もちろん顔認証だけでなく、様々な画像分類に使うことが出来ます。
 
 ![](https://raw.githubusercontent.com/yKesamaru/Building_a_face_recognition_model_using_Siamese_Network/refs/heads/master/assets/eye-catch.png)
 
-## 顔認証タスクのスコープ
-一口に顔認証システムといっても、どのようなシーンで使われるのかの想定によって、システム構成が異なってきます。具体的には、使用される学習済みモデルが異なってくる、ということです。
+## 顔認証について小難しい〇〇をチラ見する
+< 時間のない方はここを飛ばしてください。 >
+
+顔認証というのはオープンセット分類だ、というのは先述しました。実際に現場で使える技術を学ぼう！という動機も書きました。
+
+でもですね、実務で使えるレベルって小難しい沢山のことに対応しなきゃいけないんです。MNISTの次に挑戦するなら、そういった小難しい〇〇はすっ飛ばしたいですよね。
+
+例えば照明、カメラの収差。レンズ選びと撮影距離によって、被写体は全く別物くらいに写ります。[ワールド座標系・カメラ座標系](https://zenn.dev/ykesamaru/articles/b9a1efa47b30b1)とか。こういうのは実務に向き合う時に覚えればいいことです。[^3]
+
+[^3]: 拙著記事を参考文献リストに入れておきます。ご興味のある方は読んでみてね。
+
+ただ、顔データセットを作る時に、同じ人物（同じクラス）なのにどうしてこんなに写りが違うのだろう、と思ったら調べてみてください。
+
+小難しい話はとばしたいところですが、学習モデルを作成するコードを書くにあたって、これはどんな目的のコードなのか？という点は押さえておきたいところです。
+
+それは**認証にはスコープがあるということ**です。どんな規模感で、どんなスコープを対象に使うか、ということですね。そういうのが違うと、求められる学習モデルが違ってくるので、必然的に学習コードが違ってくるわけです。
 
 ### 小規模タスク
 特定環境、例えば企業内の認証システムなどでは、高精度な1対1認証が求められます。私感ですが、最もよく使用されるのは指紋認証のように感じます。スマホのロック解除にも使われますね。企業内の顔認証システム構築では一般的にこのスコープに含まれます。
 
-このようなスコープで使われるのは1対1認証です。
+このようなスコープで使われるのは1対1モードの認証です。
 
 ![https//jp.fujitsu.com/platform/pc/product/related/security/auth.html](https://raw.githubusercontent.com/yKesamaru/Building_a_face_recognition_model_using_Siamese_Network/refs/heads/master/assets/shimon_esprimo2.jpg)
 
 ### 中規模タスク
-公共の顔認識がこのスコープに含まれます。防犯カメラの映像解析やネットを対象にしたリサーチなどですね。
+公共の顔認識がこのスコープに含まれます。防犯カメラの映像解析やネットを対象にしたリサーチなどですね。あるいはコンサート会場の顔認証ゲートなんかです。
 
 オープンソースで開発されている[FACE01](https//github.com/yKesamaru/FACE01_DEV)や[その学習済みモデル](https//github.com/yKesamaru/FACE01_trained_models)はここに含まれます。
 
 ### 大規模タスク
-全人種を対象にした顔認証システムがここに含まれます。
+全人種を対象にした顔認証システムがここに含まれます。航空機発着ゲートなんかに使われています。
 
-## 【1対1モード】と【1対多モード】の違い
+### 【1対1モード】と【1対多モード】の違い
+先程のスコープに対応させるため、認識システムには、大きく分けて2つのモードがあります。それぞれの特徴と使用シーンを見てみましょう。
 
-顔認識システムには、先程のスコープに対応させるため、大きく分けて2つのモードがあります。それぞれの特徴と使用シーンを見てみましょう。
-
-### 【1対1モード】
+#### 【1対1モード】
 「1対1」モードは、2つの顔画像を比較し、それらが同一人物かどうかを判定する手法です。このモードは、**ペア単位**の認証が求められるタスクに使われます。
 
 - 類似度計算が中心
@@ -36,7 +107,7 @@
 
 通常、顔認証システムと呼ばれる多くが「1対1」モードであるといえます。正解データとの突き合わせをすればよいだけなので、（ちゃんとやれば）比較的簡単に精度を稼げます。
 
-### 【1対多モード】
+#### 【1対多モード】
 「1対多」モードは、1つの顔画像をデータベースと照合し、最も一致する人物を特定する方法です。監視カメラシステムや公共施設のアクセス制御など、大量の顔データを管理するシステムで一般的に使用されます。
 
 - データベース全体と照合するため、計算コストが高い
@@ -58,29 +129,25 @@ $$1\text{:}1\ \text{モード} \subseteq 1\text{:}\text{N}\ \text{モード}$$
 | **特徴**       | 比較対象が1人のみで誤認識が少ない。 | 誤認識を防ぐ高い精度が必要。 |
 | **用途**          | IDカードやICカードによる本人認証。             | 監視カメラや公共施設での人物特定。             |
 
+## ネットワークの設計
+さて、ここからは実際に学習用のコードを設計していきましょう。
 
-## Siamese Networkとは？
+先程の小難しい話に、1対1モードと1対多モードの話がありましたが、ここでは設計が単純な1対1モードのコードを設計します。
 
-### 概要
-[Siamese Networkは1994年にBromleyらによって提案](https//papers.nips.cc/paper/1993/file/288cc0ff022877bd3df94bc9360b9c5d-Paper.pdf?utm_source=chatgpt.com)されました。ネットワークと書いてありますが、もっと大もとの「考え方」のようなものです。
+ネットワークはSiamese Networkを用います。Siamese Networkを初めて目にする方は、先に[はやぶさの技術ノート: 【深層距離学習】Siamese NetworkとContrastive Lossを徹底解説](https://cpp-learning.com/siamese-network/)を読むと良いでしょう。とてもわかり易くまとまった良記事です。
 
-![](https://raw.githubusercontent.com/yKesamaru/Building_a_face_recognition_model_using_Siamese_Network/refs/heads/master/assets/2024-12-13-14-23-15.png)
-
-[はやぶさの技術ノート: 【深層距離学習】Siamese NetworkとContrastive Lossを徹底解説](https://cpp-learning.com/siamese-network/)がとてもわかり易いです。
-
-このネットワークは、2つの入力を受け取り、それらの類似度を学習する構造を持っています。
-
-### 主な特徴
-Siamese Networkは、同一構造の2つのサブネットワークで特徴を抽出し、その類似性を計算する、という考え方です。シンプルな考え方なので、実装も容易です。
+誤解を恐れずに言えば、Siamese Networkとは2つの入力を受け取り、それらの類似度を学習する構造のことです。その構造の中身をどうするかは設計者が自由に取捨選択します。シンプルな考え方なので、実装も容易です。
 
 ![](https://raw.githubusercontent.com/yKesamaru/Building_a_face_recognition_model_using_Siamese_Network/refs/heads/master/assets/2024-12-13-14-27-59.png)
 
-## Siamese Networkにおけるバックボーン
-Siamese Networkは、なにをバックボーンにするかで実装が変わってきます。
+それではバックボーンや損失関数、オプティマイザ・スケジューラを決めていきましょう。
 
-EfficientNetV2やResNetなどを利用することで、入力画像から特徴量を抽出（入力データを低次元の特徴ベクトルに変換）します。
+ここではよく使われるものを紹介し、最後にどれを使うか説明します。
 
-Siamese Networkでは、バックボーンで抽出された特徴ベクトルを比較し、入力ペアの類似性を判定します。
+### Siamese Networkにおけるバックボーン
+バックボーンとしてEfficientNetV2やResNetなどを利用します。これらは、入力画像から特徴量を抽出（入力データを高次元の特徴ベクトルに変換）するのが仕事です。扱いやすいのはなんと言ってもモバイル系のネットワークです。それについては拙著の[モバイル学習モデルの俯瞰: MobileNetV1からEfficientNetV2まで](https://zenn.dev/ykesamaru/articles/29e128e65e8a11)をご参照ください。
+
+モデルの大きさと学習の効率性からtimmから提供されている[EfficientNetV2のB0事前学習済みモデル](https://github.com/openvinotoolkit/open_model_zoo/blob/master/models/public/efficientnet-v2-b0/README.md)を採用します。この事前学習済みモデルはImageNetデータセットでトレーニングされています。これを転移学習することで、任意の画像分類に利用できるわけです。
 
 ## よく使われる損失関数
 Siamese Networkでは、以下のような損失関数をよく使います。
@@ -109,33 +176,54 @@ $$L = - \frac{1}{N} \sum_{i=1}^N \left[ y_i \log(\hat{y}_i) + (1 - y_i) \log(1 -
 - $\hat{y}_i$: モデルの予測確率（0〜1）。
 - $N$: サンプル数。
 
-## 必要なID数（クラス数）の見積もり
+これらの中で、ここでは顔認証タスクに定評のあるTriplet Lossを採用します。Triplet lossについては拙著[顔認証が顔を識別する仕組み](https://tokai-kaoninsho.com/%E3%82%B3%E3%83%A9%E3%83%A0/%E9%A1%94%E8%AA%8D%E8%A8%BC%E3%81%8C%E9%A1%94%E3%82%92%E8%AD%98%E5%88%A5%E3%81%99%E3%82%8B%E4%BB%95%E7%B5%84%E3%81%BF/)をご参照ください。
 
-### ID数よりペア数が重要
+![](https://raw.githubusercontent.com/yKesamaru/Building_a_face_recognition_model_using_Siamese_Network/refs/heads/master/assets/face_recognition_opencv_triplet.jpg)
+
+## 必要なID数（クラス数）の見積もり
+データセットについて考えましょう。設計上、どこに気をつければよいのでしょうか？
+### クラス数（ID数）よりペア数が重要
+通常、何も考えなければ、データセットのクラス数（ID）は多ければ多いほどよいとされます。ただ、そこにさけるパワーは有限ですし、そもそも画像を揃えられないこともしばしばです。
+
 1対1認証では、IDの数そのものよりも生成可能なペアの数が重要です。
+
+ですから人で考えれば、1枚ずつ1万人分の画像を集めるよりも、100枚ずつ100人分の画像を集めたほうがよいのです。
+（だから1対1モードを選んだのですが）
+
+データセットは人数分、名前をフォルダ名にしてまとめればよいでしょう。
+
+ペア数のペアとは、以下のような考え方です。
+
 - **同一ID内（Positiveペア）**
   - 同一人物間でのペア。
 - **異なるID間（Negativeペア）**
   - 異なる人物間でのペア。
 
-### 推奨されるID数の目安
+このペア数が、1対1認証では重要である、ということです。
+
+また、推奨されるID数の目安も知っておくと良いでしょう。
+
 - **小規模タスク** 1000ID。
 - **中規模タスク** 1000～2000ID。
 - **大規模タスク** 5000ID以上。
 
 その他、ペアの多様性や各IDに含まれる画像数がモデルの性能に影響を与えるため、顔画像データセットの質が重要です。（コレ自体でいくらでも精度が変わってしまう。。）
 
+なんと[付属の顔データセット](https://github.com/yKesamaru/Building_a_face_recognition_model_using_Siamese_Network)は前処理済みです！やったね⭐️
+
 ## オプティマイザとスケジューラの選択
-学習をやっている方々だと、「いつもコレ」という組み合わせがあるものです。わたしの推しは特に無いのですが、よく見かける組み合わせを記載します。簡単に説明をつけますが、結局「近くにいる詳しい人が使ってるのを使え」が多分正しいです。
+学習をやっている方々だと、「いつもコレ」という鉄板の組み合わせがあるものです。わたしの推しは特に無いのですが、よく見かける組み合わせを記載します[^4]。
+
+[^4]: しかしながら、結局「近くにいる詳しい人が使ってるのを使え」が多分正しいです。
 
 ### Adam + CosineAnnealingLR
 - **適用シーン**
-   - 初期実装や汎用的な学習タスク。
+   - 汎用的な学習タスク。とりあえずみんなコレ。
 - **特徴**
   - Adamの安定した収束性能と、CosineAnnealingLRの柔軟な学習率調整を組み合わせた構成。
   - 学習の中盤で学習率を徐々に下げ、収束をスムーズにする。
 - **メリット**
-  - 調整が少なくて済み、広範なタスクで安定した性能を発揮。
+  - 調整が少なくて済み、広範なタスクで安定した性能を発揮。他の組み合わせを選んだ挙句学習が収束しなくて、もしかしてオプティマイザが…という無益なストレスを受けずに済むのが最大のメリットかもしれない。
 
 ### AdamW + ReduceLROnPlateau
 - **適用シーン**
@@ -148,7 +236,7 @@ $$L = - \frac{1}{N} \sum_{i=1}^N \left[ y_i \log(\hat{y}_i) + (1 - y_i) \log(1 -
 
 ### SGD + StepLR
 - **適用シーン**
-   - 大規模データセットや微調整が必要な場合。
+   - 大規模データセットや微調整が必要な場合。といいつつ、一発逆転を狙いたい時に使う。
 - **特徴**
   - SGDによるシンプルで計算効率の良い更新と、StepLRによる段階的な学習率減少を組み合わせ。
 - **メリット**
@@ -156,11 +244,11 @@ $$L = - \frac{1}{N} \sum_{i=1}^N \left[ y_i \log(\hat{y}_i) + (1 - y_i) \log(1 -
 
 ### Ranger + ExponentialLR
 - **適用シーン**
-   - 勾配の変動が激しい場合や学習が不安定な場合。
+   - 勾配の変動が激しい場合や学習が不安定な場合、らしい。あまり見かけない。
 - **特徴**
   - RAdamとLookaheadを組み合わせたRangerが滑らかな収束を提供し、ExponentialLRが学習率を指数関数的に減少させる。
 - **メリット**
-  - 特に学習初期の不安定性を抑えつつ、後半での収束をスムーズにする。
+  - 特に学習初期の不安定性を抑えつつ、後半での収束をスムーズにする、らしい。
 
 ### [schedule_free](https://github.com/facebookresearch/schedule_free)
 「[全ての学習率スケジューリングを過去にするOptimizer](https://zenn.dev/dena/articles/6f04641801b387)」で紹介されている彗星の如く登場した期待のオプティマイザ。
@@ -172,22 +260,23 @@ $$L = - \frac{1}{N} \sum_{i=1}^N \left[ y_i \log(\hat{y}_i) + (1 - y_i) \log(1 -
 
 > 特にこれで論文を書いたりするわけでもないので、新規に網羅的な性能実験などはおこなっていません。つまり、皆さんにとっては依然として「どこの馬の骨ともわからないoptimizer」の類ではあるわけですが、それをあなたにとっての新しい「これ使っときゃOK」にするかどうかは、あなたの好奇心次第です。
 
-初期試行には鉄板の「Adam + CosineAnnealingLR」、大規模学習には「SGD + StepLR」、学習が不安定な場合には「Ranger + ExponentialLR」といった形が代表的です。個人的には[schedule_free](https://github.com/facebookresearch/schedule_free)に期待を寄せています。
+初期試行には鉄板の「Adam + CosineAnnealingLR」、一発逆転には「SGD + StepLR」、学習が不安定な場合には「Ranger + ExponentialLR」といった形です。個人的には[schedule_free](https://github.com/facebookresearch/schedule_free)に期待を寄せています（が、まだ挑戦してません）。
 
 ## [PyTorch Metric Learning](https://kevinmusgrave.github.io/pytorch-metric-learning/)
 PyTorch Metric Learningは、マイニングやトリプレットロスを用いた学習を簡単にするためのライブラリです。
+わたしは多用するのですが、他であまり見かけないです。コードがスッキリしてとても良いです。
 
-**特徴**
-- Contrastive LossやTriplet Lossをサポート。
+- Contrastive LossやTriplet Lossを楽に使える。
 - ハードネガティブマイニング機能あり。（頑強なモデルがほしいなら）
-
-**利点**
-- モジュールが豊富でカスタマイズが容易。
-- ドキュメントが充実してて扱いやすい。
+- マイナーとか便利。
+- モジュールが豊富で、なおかつドキュメントが充実してて扱いやすい。
 
 ## 実装例
+では早速（やっと？）学習用コードを実装しましょう！
 
 以下はEfficientNetV2をバックボーンとしTriplet Lossを使用した学習コードです。
+
+このコードはしっかり見てほしいので、アコーディオン表記やGitHubのコード表記をわざと避けてます。
 
 ```python: siamese_network_training.py
 """siamese_network_training.py.
@@ -354,13 +443,28 @@ writer.close()
 
 ```
 
+いかがでしょうか？思ったより短いコードだったのではないでしょうか？
+
+転移学習のため、最終層を削ってゴニョゴニョしてる以外は、MNISTと変わらなかったんじゃないでしょうか？
+
+AdamW + CosineAnnealingLRの組み合わせやTripletMarginLossの採用はわたしの趣味です。
+
+tf_efficientnetv2_b0.in1kはわたしの中で実績があるので採用しました。グラボメモリに余裕のある方（お金持ち）はB0でなくSやMを選ぶと精度が上がります[^5]。
+[^5]: そしてわたしにバッジを送ってください。もらったことありませんがZennからお金もらえるのかな？
+
 ## 検証
 10クラス分のフォルダを用意し、それぞれに50枚程度の顔画像をセットし、`siamese_network_training.py`を10エポック動作させ`model_epoch8_loss0.0010.pth`を得ました。ファイル名に`epoch8`とあるのは、8エポック目以降にロスが減少しなかったためです。
 
 ![](https://raw.githubusercontent.com/yKesamaru/Building_a_face_recognition_model_using_Siamese_Network/refs/heads/master/assets/2024-12-14-10-20-53.png)
 
+ちなみに、如何に1対1認証用とはいえ、10クラス、各50枚程度の学習では実用に耐えません。が、これは「挑戦」なのでよしとしましょう。（してください…）
 
-### 検証コード
+### 検証コード①
+学習が終わったら検証をします。検証には様々な手法があるのですが、それをつぶさに解説・実装してもあまり意味がないため、最初に単純な画像比較、次に代表的なROC曲線プロットとAUCスコア算出を行います。
+
+まずは画像比較です。
+
+:::details 単純な画像比較
 ```python: siamese_inference.py
 """siamese_inference.py.
 
@@ -476,8 +580,9 @@ if __name__ == "__main__":
     main()
 
 ```
+:::
 
-### 検証結果
+#### 検証結果
 ![](https://raw.githubusercontent.com/yKesamaru/Building_a_face_recognition_model_using_Siamese_Network/refs/heads/master/assets/2024-12-14-10-33-43.png)
 
 上記の画像で学習した後、以下の**学習に使っていない画像**で類似度を計算しました。
@@ -493,14 +598,18 @@ if __name__ == "__main__":
 
 **類似度は0.9428**となり、本人であることが強く示唆されました。
 
+### 検証コード②
 それでは既存のクラスだけではなく、未知のクラスへの汎用性はどうでしょうか？
 
-検証のために、**学習では用いなかった20クラス分（未知の20人）**のフォルダを用意し、それぞれに50枚程度の顔画像をセットしました。
+検証のために、[**学習では用いなかった20クラス分（未知の20人）**のフォルダを用意](https://github.com/yKesamaru/Building_a_face_recognition_model_using_Siamese_Network/tree/master/assets/otameshi_kensho)し、それぞれに50枚程度の顔画像をセットしました。
 
-`aoc_plot_siamese_1-N.py`というAUCスコアとROC曲線をプロットするコードを書いて検証します。
+で、ここでも注意点なのですが、1対1モードの場合と1対多モードでは検証コードが異なります。先に言ってしまうと、1対1モードで学習されたモデルに1対多モードの検証コードを適用するのは意味がないどころか有害です。精度が悪く出てしまいますから。
 
-このコードはそのファイル名が示すとおり、1対多モード用の精度検証用コードです。まずはこちらで汎化性能をみてみます。
+でも練習なので、ここでは両方の検証コードを作り、結果を見てみます。
 
+`aoc_plot_siamese_1-N.py`というAUCスコアとROC曲線をプロットするコードを書いて検証します。1対多モードの検証コードです。
+
+:::details 1対多モードの検証コード
 ```python: aoc_plot_siamese.py
 """aoc_plot_siamese_1-N.py.
 
@@ -672,13 +781,16 @@ if __name__ == "__main__":
     plot_roc_curve(similarities, labels, output_path="roc_curve.png")
 
 ```
+:::
 
 ![](https://raw.githubusercontent.com/yKesamaru/Building_a_face_recognition_model_using_Siamese_Network/refs/heads/master/assets/roc_curve.png)
 
 さすがに10クラスしか学習していない学習済みモデルでは、未知の20クラスに対してまともな精度は出せないですね。
 
+### 検証コード③
 とはいえ、今のは1対多モード用のコードでした。次は1対1モード用のROC曲線作成コード（`aoc_plot_siamese_1-1.py`）を用意して実行してみます。
 
+:::details 1対多モードの検証コード
 ```python
 """aoc_plot_siamese_1-1.py.
 
@@ -730,13 +842,13 @@ class SiameseNetwork(nn.Module):
 
 # 学習済みモデルの読み込み
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model_path = "/home/terms/bin/pytorch-metric-learning/model_epoch8_loss0.0010_2024年12月14日.pth"
+model_path = "/home/user/bin/pytorch-metric-learning/model_epoch8_loss0.0010_2024年12月14日.pth"
 model = SiameseNetwork(embedding_dim=512)  # 学習時と同じモデル構造を再現
 model.load_state_dict(torch.load(model_path, map_location=device))
 model.eval().to(device)
 
 # 検証用データのパス
-test_data_dir = "/home/terms/bin/pytorch-metric-learning/otameshi_kensho/"
+test_data_dir = "/home/user/bin/pytorch-metric-learning/otameshi_kensho/"
 
 # 検証用データの変換
 test_transform = transforms.Compose([
@@ -856,27 +968,35 @@ if __name__ == "__main__":
     plot_roc_curve(similarities, labels, output_path="roc_curve_1to1.png")
 
 ```
+:::
+
 
 ![](https://raw.githubusercontent.com/yKesamaru/Building_a_face_recognition_model_using_Siamese_Network/refs/heads/master/assets/roc_curve_1to1.png)
 
-orz...
+orz...あれれれ？
+
 さっきより悪い結果が出ました。
 
 まぁ、10クラス（各クラス50枚程度の顔画像ファイル）で10エポックしか学習していないわけですからこんなものです。まともな結果を出したければ1000クラス以上（各クラス100枚以上の顔画像ファイル）がどうしたって必要です。
 
-とはいえ、記事作成用の学習ならこれくらいでいっか…と考えていたのですが、さすがに悔しくなりました。
+とはいえ、さすがに悔しくなりました。
 
 現在、2000クラスに対して学習をさせているところです。
 
 …が、記事作成時点で1エポックしか終わってませんでした。先は長そうです。
 
+↓ イマココ
+
+![](https://raw.githubusercontent.com/yKesamaru/Building_a_face_recognition_model_using_Siamese_Network/refs/heads/master/assets/2024-12-15-16-02-18.png)
 
 ## さいごに
-本記事ではSiamese Networkを用いた1対1モードの学習モデルを作成するためのコードを作成・実行・検証しました。
+本記事は<記事投稿コンテスト「今年の最も大きなチャレンジ」>のために執筆しました。
+わたしにとってもチャレンジ（2000クラスに対して学習）ですが、AI・機械学習を志すすべての人のチャレンジとなるように、学習コード・データセット・検証コードをセットにしました。
 
-1対1モードがどういうものか、認証界隈の解説（認証のスコープなど）も簡単ですが加えました。
+その中で、1対1モードがどういうものか、認証界隈の解説（認証のスコープなど）も簡単ですが加えました。
+好奇心とGPUがあれば、あなた専用の学習モデルが作れちゃいます😀
 
-データセットとGPUがあれば、あなた専用の学習モデルが作れちゃいますね😀
+個人開発でサービスを立ち上げて、キラキラな技術スタックを解説するようなのではなく、MNISTの次に挑戦できるものを作った感じです。需要はあるはずですが、地味ですね。[リポジトリから前処理済みのデータセットもダウンロードできるの](https://github.com/yKesamaru/Building_a_face_recognition_model_using_Siamese_Network/tree/master/assets)が売りです。これを用意するほうが大変でした💦
 
 以上です。ありがとうございました。
 
@@ -889,11 +1009,18 @@ https://github.com/yKesamaru/FACE01_trained_models
 
 ![](https://raw.githubusercontent.com/yKesamaru/Building_a_face_recognition_model_using_Siamese_Network/refs/heads/master/assets/2024-12-14-22-36-04.png)
 
-## 文献・参考サイト
-- [Siamese NetworkとContrastive Lossを徹底解説 - はやぶさの技術ノート](https://cpp-learning.com/siamese-network/)
-- [Siamese Networkの提案論文（NIPS1993）](https://papers.nips.cc/paper/1993/file/288cc0ff022877bd3df94bc9360b9c5d-Paper.pdf)
-- [J-GLOBALでの手書き文字認証に関する情報](https://jglobal.jst.go.jp/detail?JGLOBAL_ID=201902267980547740)
-- [PyTorch Metric Learning](https://kevinmusgrave.github.io/pytorch-metric-learning/)
-- [FACE01 開発リポジトリ](https://github.com/yKesamaru/FACE01_DEV)
-- [FACE01 学習済みモデル](https://github.com/yKesamaru/FACE01_trained_models)
-- [全ての学習率スケジューリングを過去にするOptimizer - DeNA技術記事](https://zenn.dev/dena/articles/6f04641801b387)
+## 参考文献リスト
+- 拙著記事
+  - [カメラキャリブレーションのABC: 知っておきたい基本](https://tokai-kaoninsho.com/%e3%82%b3%e3%83%a9%e3%83%a0/%e3%82%ab%e3%83%a1%e3%83%a9%e3%82%ad%e3%83%a3%e3%83%aa%e3%83%96%e3%83%ac%e3%83%bc%e3%82%b7%e3%83%a7%e3%83%b3%e3%81%aeabc-%e7%9f%a5%e3%81%a3%e3%81%a6%e3%81%8a%e3%81%8d%e3%81%9f%e3%81%84%e5%9f%ba/)
+  - [レンズの歪曲収差と対応方法](https://tokai-kaoninsho.com/%e3%82%b3%e3%83%a9%e3%83%a0/%e3%83%ac%e3%83%b3%e3%82%ba%e3%81%ae%e6%ad%aa%e6%9b%b2%e5%8f%8e%e5%b7%ae%e3%81%a8%e5%af%be%e5%bf%9c%e6%96%b9%e6%b3%95/)
+  - [日本人顔認識のための新たな学習モデルを作成 ~ `EfficientNetV2`ファインチューニング ~](https://zenn.dev/ykesamaru/articles/bc74ec27925896)
+  - [モバイル学習モデルの俯瞰: MobileNetV1からEfficientNetV2まで](https://zenn.dev/ykesamaru/articles/29e128e65e8a11)
+- 拙作リポジトリ
+  - [FACE01 開発リポジトリ](https://github.com/yKesamaru/FACE01_DEV)
+  - [FACE01 学習済みモデル](https://github.com/yKesamaru/FACE01_trained_models)
+- その他
+  - [Siamese NetworkとContrastive Lossを徹底解説 - はやぶさの技術ノート](https://cpp-learning.com/siamese-network/)
+  - [Siamese Networkの提案論文（NIPS1993）](https://papers.nips.cc/paper/1993/file/288cc0ff022877bd3df94bc9360b9c5d-Paper.pdf)
+  - [PyTorch Metric Learning](https://kevinmusgrave.github.io/pytorch-metric-learning/)
+  - [全ての学習率スケジューリングを過去にするOptimizer - DeNA技術記事](https://zenn.dev/dena/articles/6f04641801b387)
+
