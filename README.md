@@ -983,11 +983,17 @@ orz...あれれれ？
 
 現在、2000クラスに対して学習をさせているところです。
 
-…が、記事作成時点で1エポックしか終わってませんでした。先は長そうです。
+~~…が、記事作成時点で1エポックしか終わってませんでした。先は長そうです。~~
 
 ↓ イマココ
 
-![](https://raw.githubusercontent.com/yKesamaru/Building_a_face_recognition_model_using_Siamese_Network/refs/heads/master/assets/2024-12-15-16-02-18.png)
+![](https://raw.githubusercontent.com/yKesamaru/Building_a_face_recognition_model_using_Siamese_Network/refs/heads/master/assets/2024-12-16-09-36-49.png)
+
+Model saved to saved_models/model_epoch52_loss0.0549.pth
+
+2000クラス52エポック時点の学習済みモデルにて、未知の23クラス（各20〜30枚程度）に対して1対1モードの検証を行いました。
+
+![](https://raw.githubusercontent.com/yKesamaru/Building_a_face_recognition_model_using_Siamese_Network/refs/heads/master/assets/roc_curve_1to1_52epock.png)
 
 ## さいごに
 本記事は<記事投稿コンテスト「今年の最も大きなチャレンジ」>のために執筆しました。
