@@ -609,7 +609,7 @@ if __name__ == "__main__":
 
 `aoc_plot_siamese_1-N.py`というAUCスコアとROC曲線をプロットするコードを書いて検証します。1対多モードの検証コードです。
 
-:::details 1対多モードの検証コード
+:::details 1対多モードのROC曲線検証コード
 ```python: aoc_plot_siamese.py
 """aoc_plot_siamese_1-N.py.
 
@@ -790,7 +790,7 @@ if __name__ == "__main__":
 ### 検証コード③
 とはいえ、今のは1対多モード用のコードでした。次は1対1モード用のROC曲線作成コード（`aoc_plot_siamese_1-1.py`）を用意して実行してみます。
 
-:::details 1対多モードの検証コード
+:::details 1対多モードのROC曲線検証コード
 ```python
 """aoc_plot_siamese_1-1.py.
 
@@ -985,6 +985,10 @@ orz...あれれれ？
 
 ~~…が、記事作成時点で1エポックしか終わってませんでした。先は長そうです。~~
 
+---
+
+**追記:**
+
 ↓ イマココ
 
 ![](https://raw.githubusercontent.com/yKesamaru/Building_a_face_recognition_model_using_Siamese_Network/refs/heads/master/assets/2024-12-16-09-36-49.png)
@@ -994,6 +998,149 @@ Model saved to saved_models/model_epoch52_loss0.0549.pth
 2000クラス52エポック時点の学習済みモデルにて、未知の23クラス（各20〜30枚程度）に対して1対1モードの検証を行いました。
 
 ![](https://raw.githubusercontent.com/yKesamaru/Building_a_face_recognition_model_using_Siamese_Network/refs/heads/master/assets/roc_curve_1to1_52epock.png)
+
+全く未知の人物ペアに対し、非常に高い精度を出しました！これは未知データへの汎化性能が優れていることを表しています。
+
+…。
+
+ちょっと出来すぎてますね。未知データセットで検証したのでオーバーフィッティングは起こしてないはずですが。
+予定していませんでしたが、他の検証もやってみましょう🤔
+
+
+:::details 1対多モードのPR曲線検証コード
+"""pr_curve_plot_siamese_1-1.py.
+
+Summary:
+    このスクリプトは、学習済みのSiamese Networkモデルを用いて
+    1対1モードにおけるPR曲線をプロットするためのコードです。
+    特定の登録者（テンプレート）と他の画像との類似度を計算し、
+    登録者本人のデータ（Positive）と他人のデータ（Negative）を区別する能力を評価します。
+
+    主な機能:
+    - 検証用データセットから埋め込みベクトルを生成。
+    - 登録者（テンプレート）と他の画像の間でコサイン類似度を計算。
+    - PR曲線を描画し、AP（Average Precision）スコアを算出。
+    - プロット画像をカレントディレクトリに保存。
+
+License:
+    This script is licensed under the terms provided by yKesamaru, the original author.
+"""
+
+import matplotlib.pyplot as plt
+import torch
+import torch.nn as nn
+from sklearn.metrics import average_precision_score, precision_recall_curve
+from timm import create_model
+from torchvision import datasets, transforms
+from tqdm import tqdm
+
+
+class SiameseNetwork(nn.Module):
+    """Siamese Networkのクラス定義."""
+
+    def __init__(self, embedding_dim=512):
+        super(SiameseNetwork, self).__init__()
+        self.backbone = create_model('tf_efficientnetv2_b0.in1k', pretrained=True, num_classes=0)
+        num_features = self.backbone.num_features
+        self.embedder = nn.Linear(num_features, embedding_dim)
+
+    def forward(self, x):
+        return self.embedder(self.backbone(x))
+
+
+# 学習済みモデルの読み込み
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+model_path = "/home/terms/bin/pytorch-metric-learning/saved_models/model_epoch52_loss0.0549.pth"
+model = SiameseNetwork(embedding_dim=512)
+model.load_state_dict(torch.load(model_path, map_location=device))
+model.eval().to(device)
+
+# 検証用データの設定
+test_data_dir = "/home/terms/bin/pytorch-metric-learning/otameshi_kensho/"
+test_transform = transforms.Compose([
+    transforms.Resize((224, 224)),
+    transforms.ToTensor(),
+    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+])
+test_dataset = datasets.ImageFolder(root=test_data_dir, transform=test_transform)
+test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=1, shuffle=False)
+
+
+def calculate_similarity(embedding1, embedding2):
+    """埋め込みベクトル間のコサイン類似度を計算."""
+    return torch.nn.functional.cosine_similarity(embedding1, embedding2).item()
+
+
+def compute_embeddings(loader, model):
+    """データローダーを用いて埋め込みベクトルを計算."""
+    embeddings = {}
+    for img, label in tqdm(loader, desc="Computing Embeddings"):
+        with torch.no_grad():
+            img = img.to(device)
+            embedding = model(img)
+            embeddings[label.item()] = embeddings.get(label.item(), []) + [embedding]
+    return embeddings
+
+
+def evaluate_one_to_one_pr(embeddings, target_class):
+    """1対1モードに基づき、PR曲線データを生成."""
+    similarities = []
+    labels = []
+    target_embeddings = embeddings[target_class]
+
+    for embedding in target_embeddings:
+        # Positive: 登録者 vs 本人
+        for other_embedding in target_embeddings:
+            if not torch.equal(embedding, other_embedding):
+                sim = calculate_similarity(embedding, other_embedding)
+                similarities.append(sim)
+                labels.append(1)
+
+        # Negative: 登録者 vs 他人
+        for other_class, other_embeddings in embeddings.items():
+            if other_class != target_class:
+                for other_embedding in other_embeddings:
+                    sim = calculate_similarity(embedding, other_embedding)
+                    similarities.append(sim)
+                    labels.append(0)
+
+    return similarities, labels
+
+
+def plot_pr_curve(similarities, labels, output_path="pr_curve_1to1.png"):
+    """PR曲線をプロットし、画像として保存."""
+    precision, recall, _ = precision_recall_curve(labels, similarities)
+    ap_score = average_precision_score(labels, similarities)
+
+    plt.figure(figsize=(8, 6))
+    plt.plot(recall, precision, label=f"AP = {ap_score:.4f}")
+    plt.xlabel("Recall")
+    plt.ylabel("Precision")
+    plt.title("Precision-Recall Curve")
+    plt.legend()
+    plt.grid()
+    plt.savefig(output_path)
+    plt.show()
+
+
+if __name__ == "__main__":
+    # 埋め込みベクトルの計算
+    embeddings = compute_embeddings(test_loader, model)
+
+    # 評価対象クラス（例: クラスID 0）
+    target_class = 0
+
+    # PR曲線用データの計算
+    similarities, labels = evaluate_one_to_one_pr(embeddings, target_class)
+
+    # PR曲線のプロットと保存
+    plot_pr_curve(similarities, labels, output_path="pr_curve_1to1.png")
+
+:::
+
+![](https://raw.githubusercontent.com/yKesamaru/Building_a_face_recognition_model_using_Siamese_Network/refs/heads/master/pr_curve_1to1.png)
+
+
 
 ## さいごに
 本記事は<記事投稿コンテスト「今年の最も大きなチャレンジ」>のために執筆しました。
