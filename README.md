@@ -1006,8 +1006,11 @@ Model saved to saved_models/model_epoch52_loss0.0549.pth
 ちょっと出来すぎてますね。未知データセットで検証したのでオーバーフィッティングは起こしてないはずですが。
 予定していませんでしたが、他の検証もやってみましょう🤔
 
+ROC曲線は全体的な性能を評価します。なので次はPR曲線をプロットしてみたいとおもいます。未知データセットに不均衡はないのですが、ここでは1対1用の学習済みモデルの性能評価なので。
+コードは以下のとおりです。
 
 :::details 1対多モードのPR曲線検証コード
+```python: pr_curve_plot_siamese_1-1.py
 """pr_curve_plot_siamese_1-1.py.
 
 Summary:
@@ -1050,13 +1053,13 @@ class SiameseNetwork(nn.Module):
 
 # 学習済みモデルの読み込み
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model_path = "/home/terms/bin/pytorch-metric-learning/saved_models/model_epoch52_loss0.0549.pth"
+model_path = "/home/user/bin/pytorch-metric-learning/saved_models/model_epoch52_loss0.0549.pth"
 model = SiameseNetwork(embedding_dim=512)
 model.load_state_dict(torch.load(model_path, map_location=device))
 model.eval().to(device)
 
 # 検証用データの設定
-test_data_dir = "/home/terms/bin/pytorch-metric-learning/otameshi_kensho/"
+test_data_dir = "/home/user/bin/pytorch-metric-learning/otameshi_kensho/"
 test_transform = transforms.Compose([
     transforms.Resize((224, 224)),
     transforms.ToTensor(),
@@ -1135,12 +1138,15 @@ if __name__ == "__main__":
 
     # PR曲線のプロットと保存
     plot_pr_curve(similarities, labels, output_path="pr_curve_1to1.png")
-
+```
 :::
 
-![](https://raw.githubusercontent.com/yKesamaru/Building_a_face_recognition_model_using_Siamese_Network/refs/heads/master/pr_curve_1to1.png)
+![](https://raw.githubusercontent.com/yKesamaru/Building_a_face_recognition_model_using_Siamese_Network/refs/heads/master/assets/pr_curve_1to1.png)
 
+フム…。なかなかいいんじゃないでしょうか？未知データセットが今回23クラスだったので、若干右上がギザギザしていますが。
+APスコアが0.9894なので、精度として問題ないかと。（$AP ≥ 0.95$）
 
+学習は現在進行形で進めてますし、より良い学習済みモデルが出来上がったら検証後に公開します。（[JAPANESE FACE V1](https://github.com/yKesamaru/FACE01_trained_models)のように独立してリポジトリをたてると思います。）
 
 ## さいごに
 本記事は<記事投稿コンテスト「今年の最も大きなチャレンジ」>のために執筆しました。
