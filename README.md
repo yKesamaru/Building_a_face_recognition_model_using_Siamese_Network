@@ -1166,15 +1166,15 @@ APスコアが0.9894なので、精度として問題ないかと。（$AP ≥ 0
 
 ↓ イマココ
 
-![](assets/2024-12-19_14-09.png)
+![](https://raw.githubusercontent.com/yKesamaru/Building_a_face_recognition_model_using_Siamese_Network/refs/heads/master/assets/2024-12-19_14-09.png)
 
 2日半、熟成させてロスが0.0341まで下りました。（`saved_models/retrain_model_epoch84_loss0.0341.pth`）
 
 このモデルでのROC曲線、AUCスコア、PR曲線、APスコアを用いた評価を行います。
 
-![](assets/roc_curve_1to1_retrain_model_epoch84_loss0.0341.png)
+![](https://raw.githubusercontent.com/yKesamaru/Building_a_face_recognition_model_using_Siamese_Network/refs/heads/master/assets/roc_curve_1to1_retrain_model_epoch84_loss0.0341.png)
 
-![](assets/pr_curve_1to1_retrain_model_epoch84_loss0.0341.png)
+![](https://raw.githubusercontent.com/yKesamaru/Building_a_face_recognition_model_using_Siamese_Network/refs/heads/master/assets/pr_curve_1to1_retrain_model_epoch84_loss0.0341.png)
 
 フム…、AUCスコアとAPスコアの両方が若干下がっていますね。過学習かもしれません。
 
@@ -1400,9 +1400,9 @@ if __name__ == "__main__":
 
 標準出力をスプレッドシートに貼り付けてグラフ化したものが以下になります。グラフが2つあるのは当初の学習と、一度学習が止まってしまったのでベストロスから再学習させたものがあるからです。
 
-![](assets/2024-12-19-20-52-08.png)
+![](https://raw.githubusercontent.com/yKesamaru/Building_a_face_recognition_model_using_Siamese_Network/refs/heads/master/assets/2024-12-19-20-52-08.png)
 
-![](assets/2024-12-19-20-52-47.png)
+![](https://raw.githubusercontent.com/yKesamaru/Building_a_face_recognition_model_using_Siamese_Network/refs/heads/master/assets/2024-12-19-20-52-47.png)
 
 APスコアが揺れているのは検証用の各クラスが20枚程度しかないからかも。評価クラスを増やすか、全ペア総当りの評価コードを書いて実行するかの2通りです。どちらも用意しましたが、この記事の趣旨からどんどんずれていくので、この辺でやめておきます。。
 
