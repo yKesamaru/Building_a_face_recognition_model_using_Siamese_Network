@@ -1160,6 +1160,253 @@ APスコアが0.9894なので、精度として問題ないかと。（$AP ≥ 0
 
 学習は現在進行形で進めてますし、より良い学習済みモデルが出来上がったら検証後に公開します。（[JAPANESE FACE V1](https://github.com/yKesamaru/FACE01_trained_models)のように独立してリポジトリをたてると思います。）
 
+---
+
+**追記:**
+
+↓ イマココ
+
+![](assets/2024-12-19_14-09.png)
+
+2日半、熟成させてロスが0.0341まで下りました。（`saved_models/retrain_model_epoch84_loss0.0341.pth`）
+
+このモデルでのROC曲線、AUCスコア、PR曲線、APスコアを用いた評価を行います。
+
+![](assets/roc_curve_1to1_retrain_model_epoch84_loss0.0341.png)
+
+![](assets/pr_curve_1to1_retrain_model_epoch84_loss0.0341.png)
+
+フム…、AUCスコアとAPスコアの両方が若干下がっていますね。過学習かもしれません。
+
+この地点が過学習だと仮定して、だとするとこれまでの自動保存された学習済みモデルのなかにベストな学習済みモデルが存在するはずです。ちょっと探してみましょう。
+
+学習済みモデルはすべてsaved_modelディレクトリにあります。これら全てを対象にAUCスコアとAPスコアを算出するコードを書いてみましょう。
+
+:::details すべての学習済みモデル: AUC、APスコア評価コード
+```python
+"""calculate_auc_ap_for_all_models.py.
+
+Summary:
+    このスクリプトは、学習済みのSiamese Networkモデルを用いて
+    1対1モード（Verificationタスク）におけるAUCスコアおよびAPスコアを算出し、
+    複数の学習済みモデルに対して評価を行うコードです。
+    特定の登録者（テンプレート）クラスを基準に、
+    同一クラス内の画像間類似度（Positive）および他クラス画像との類似度（Negative）を取得します。
+    これにより、入力画像が登録者本人か否かを判別する性能を評価できます。
+
+    主な機能:
+    - 検証用データセットから埋め込みベクトルを生成（ImageFolderを使用）
+    - 特定の登録者クラスを指定し、そのクラスをPositiveの基準として類似度を計算
+    - Positive（本人 vs 本人）およびNegative（本人 vs 他人）ペアを作成し、コサイン類似度を算出
+    - ROC AUCスコアおよびAverage Precision (AP)スコアを計算して評価
+    - 複数の学習済みモデル(.pth)ファイルを横断的に評価
+
+Example:
+    1. `test_data_dir`に評価用データセットのパスを指定してください。
+    2. `target_class`に評価対象クラスIDを指定してください。
+    3. スクリプトを実行すると、全てのモデルファイルに対してAUCおよびAPスコアが出力されます。
+
+License:
+    This script is licensed under the terms provided by yKesamaru, the original author.
+"""
+import glob
+import os
+
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from sklearn.metrics import average_precision_score, roc_auc_score
+from timm import create_model
+from torch.utils.data import DataLoader
+from torchvision import datasets, transforms
+from tqdm import tqdm
+
+
+class SiameseNetwork(nn.Module):
+    """
+    Siamese Networkモデル定義クラス
+
+    EfficientNetV2をバックボーンとして使用し、
+    その出力特徴量を全結合層で圧縮して埋め込みベクトルを生成する。
+
+    Attributes:
+        backbone (nn.Module): EfficientNetV2のバックボーン
+        embedder (nn.Linear): 埋め込み用の全結合層
+    """
+    def __init__(self, embedding_dim=512):
+        super(SiameseNetwork, self).__init__()
+        # EfficientNetV2をバックボーンとして使用
+        self.backbone = create_model('tf_efficientnetv2_b0.in1k', pretrained=True, num_classes=0)
+        num_features = self.backbone.num_features
+        self.embedder = nn.Linear(num_features, embedding_dim)
+
+    def forward(self, x):
+        # 入力画像xから特徴を抽出して埋め込みベクトルを返す
+        features = self.backbone(x)
+        embeddings = self.embedder(features)
+        return embeddings
+
+
+def extract_embeddings(model, dataloader, device):
+    """
+    テストデータからモデルの埋め込みベクトルを抽出する関数
+
+    Args:
+        model (nn.Module): 学習済みSiamese Networkモデル
+        dataloader (DataLoader): テストデータローダー
+        device (torch.device): デバイス（CPUまたはGPU）
+
+    Returns:
+        (dict):
+            クラスIDをキーとし、そのクラスの画像埋め込みを格納した辞書を返す。
+            形式: { class_id: [embedding_tensor, embedding_tensor, ...], ... }
+    """
+    model.eval()  # 評価モードへ
+    embeddings_dict = {}  # クラスID毎に埋め込みを貯める辞書
+    with torch.no_grad():
+        for images, labels in tqdm(dataloader, desc="Extracting embeddings"):  # 埋め込み抽出進捗バー
+            images = images.to(device)  # 画像をデバイスへ移動
+            emb = model(images)  # 埋め込み取得
+            # バッチ内のサンプルをクラスごとに格納
+            for e, l in zip(emb, labels):
+                class_id = l.item()
+                if class_id not in embeddings_dict:
+                    embeddings_dict[class_id] = []
+                embeddings_dict[class_id].append(e.cpu())  # CPU上に保存
+    return embeddings_dict
+
+
+def compute_auc_ap_one_to_one(embeddings_dict, target_class):
+    """
+    1対1認証（Verification）タスクとしてAUCとAPを計算する関数
+
+    特定のクラス(target_class)を「登録者」とみなし、
+    - Positiveペア: target_class内の異なる画像間ペア
+    - Negativeペア: target_classの画像と他クラス画像間ペア
+    からコサイン類似度を算出し、AUCおよびAPを求める。
+
+    Args:
+        embeddings_dict (dict): { class_id: [embedding1, embedding2, ...] }形式の辞書
+        target_class (int): 評価対象のクラスID
+
+    Returns:
+        (float, float): (auc, ap)
+            auc: ROC AUCスコア
+            ap: Average Precisionスコア
+    """
+
+    similarities = []
+    labels = []
+
+    # ターゲットクラスの埋め込みリスト取得
+    target_embeddings = embeddings_dict.get(target_class, [])
+    # ターゲットクラスが存在しない、または画像が少なすぎる場合は例外対応
+    if len(target_embeddings) < 2:
+        # 正常な評価ができないのでそのまま返す
+        return float('nan'), float('nan')
+
+    # Positiveペア作成(同クラス内で異なる画像同士)
+    # target_embeddings内の全組み合わせペアを生成する
+    for i in range(len(target_embeddings)):
+        for j in range(i + 1, len(target_embeddings)):
+            emb_i = target_embeddings[i].unsqueeze(0)  # (1, D)
+            emb_j = target_embeddings[j].unsqueeze(0)  # (1, D)
+            # コサイン類似度計算
+            sim = F.cosine_similarity(emb_i, emb_j).item()
+            similarities.append(sim)
+            labels.append(1)  # Positive
+
+    # Negativeペア作成(target_classと他クラスのペア)
+    # 他クラスの埋め込みを総当たり
+    for cls_id, emb_list in embeddings_dict.items():
+        if cls_id == target_class:
+            continue
+        for e_target in target_embeddings:
+            for e_other in emb_list:
+                emb_t = e_target.unsqueeze(0)
+                emb_o = e_other.unsqueeze(0)
+                sim = F.cosine_similarity(emb_t, emb_o).item()
+                similarities.append(sim)
+                labels.append(0)  # Negative
+
+    # numpy配列へ変換
+    y_true = torch.tensor(labels).numpy()
+    y_score = torch.tensor(similarities).numpy()
+
+    # AUCおよびAP計算
+    auc = roc_auc_score(y_true, y_score)
+    ap = average_precision_score(y_true, y_score)
+
+    return auc, ap
+
+
+def evaluate_model(model_path, test_dataloader, device, target_class=0):
+    """
+    単一モデルに対し、1対1認証評価用のAUCスコアとAPスコアを計算する関数
+
+    Args:
+        model_path (str): モデルファイルのパス(.pth)
+        test_dataloader (DataLoader): テストデータローダー
+        device (torch.device): デバイス情報
+        target_class (int): 評価対象のクラスID（登録者）
+
+    Returns:
+        (float, float): (auc, ap)
+    """
+    # モデルインスタンス化
+    model = SiameseNetwork(embedding_dim=512)
+    model.load_state_dict(torch.load(model_path, map_location=device))
+    model.to(device)  # デバイスへ移動
+
+    embeddings_dict = extract_embeddings(model, test_dataloader, device)  # 埋め込み抽出
+    auc, ap = compute_auc_ap_one_to_one(embeddings_dict, target_class)     # 1対1認証でのAUC, AP計算
+
+    return auc, ap
+
+
+if __name__ == "__main__":
+    # デバイス設定
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    # テスト用ディレクトリ（1対1認証を評価するデータセット）
+    test_data_dir = "/home/user/ドキュメント/Building_a_face_recognition_model_using_Siamese_Network/assets/otameshi_kensho/"
+
+    # テストデータ用の変換(学習時と同等)
+    mean_value = [0.485, 0.456, 0.406]
+    std_value = [0.229, 0.224, 0.225]
+    test_transform = transforms.Compose([
+        transforms.Resize((224, 224)),            # 画像を224x224にリサイズ
+        transforms.ToTensor(),                    # テンソル化
+        transforms.Normalize(mean=mean_value, std=std_value)  # 正規化
+    ])  # テスト用変換定義
+
+    # テストデータセットとローダー作成
+    test_dataset = datasets.ImageFolder(root=test_data_dir, transform=test_transform)
+    test_dataloader = DataLoader(test_dataset, batch_size=32, shuffle=False)
+
+    # 評価対象のターゲットクラスを指定（0番目のクラス）
+    target_class = 0  # ターゲットクラスID
+
+    # 評価対象モデルが格納されているディレクトリ
+    model_dir = "/home/user/bin/pytorch-metric-learning/saved_models/"
+    model_paths = glob.glob(os.path.join(model_dir, "*.pth"))  # pthファイルの全取得
+
+    # 各モデルに対して1対1認証のAUCとAPを計算・表示
+    for mp in model_paths:
+        auc_score, ap_score = evaluate_model(mp, test_dataloader, device, target_class)  # 個別モデル評価
+        print(f"Model: {mp}, AUC: {auc_score:.4f}, AP: {ap_score:.4f}")
+```
+:::
+
+標準出力をスプレッドシートに貼り付けてグラフ化したものが以下になります。グラフが2つあるのは当初の学習と、一度学習が止まってしまったのでベストロスから再学習させたものがあるからです。
+
+![](assets/2024-12-19-20-52-08.png)
+
+![](assets/2024-12-19-20-52-47.png)
+
+APスコアが揺れているのは検証用の各クラスが20枚程度しかないからかも。評価クラスを増やすか、全ペア総当りの評価コードを書いて実行するかの2通りです。どちらも用意しましたが、この記事の趣旨からどんどんずれていくので、この辺でやめておきます。。
+
+
 ## さいごに
 本記事は<記事投稿コンテスト「今年の最も大きなチャレンジ」>のために執筆しました。
 わたしにとってもチャレンジ（2000クラスに対して学習）ですが、AI・機械学習を志すすべての人のチャレンジとなるように、学習コード・データセット・検証コードをセットにしました。
